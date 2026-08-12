@@ -1,0 +1,55 @@
+# Dependencies & build output
+node_modules
+dist
+dist-ssr
+*.local
+
+# Git / VCS
+.git
+.gitignore
+.gitattributes
+
+# Environment & secrets (never bake into the image)
+.env
+.env.*
+!.env.docker.example
+
+# Editor / IDE
+.vscode
+.idea
+*.sw?
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+.DS_Store
+
+# Logs & coverage
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+coverage
+.nyc_output
+
+# Tests & lint configs not required for `npm run build`
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+eslint.config.js
+.editorconfig
+
+# Keep build context lean (docker/ nginx template must remain included)
+Dockerfile*
+docker-compose*.yml
+docker-compose*.yaml
+.dockerignore
+README.md
+*.md
+
+# Cursor / agent clutter
+.cursor
+agent-transcripts
