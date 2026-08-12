@@ -1,0 +1,26 @@
+# Sourced by the nginx image entrypoint (*.envsh) so exports affect envsubst.
+# Named 18-* to run after IPv6 setup and before 20-envsubst-on-templates.sh.
+
+if [ -z "${API_PROXY_TARGET:-}" ]; then
+  echo "ERROR: API_PROXY_TARGET is required (e.g. https://hr-api.example.com)" >&2
+  exit 1
+fi
+
+# Normalize: strip trailing slash so proxy_pass + /api/... stays correct
+case "${API_PROXY_TARGET}" in
+  */)
+    API_PROXY_TARGET="${API_PROXY_TARGET%/}"
+    export API_PROXY_TARGET
+    ;;
+esac
+
+case "${API_PROXY_TARGET}" in
+  http://*|https://*)
+    ;;
+  *)
+    echo "ERROR: API_PROXY_TARGET must start with http:// or https://" >&2
+    exit 1
+    ;;
+esac
+
+echo "API proxy target: ${API_PROXY_TARGET}"

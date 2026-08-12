@@ -1,0 +1,7 @@
+# Keep shell/nginx templates LF so Linux containers start correctly on Windows checkouts
+docker/*.sh text eol=lf
+docker/*.envsh text eol=lf
+docker/*.template text eol=lf
+Dockerfile text eol=lf
+.dockerignore text eol=lf
+docker-compose*.yml text eol=lf

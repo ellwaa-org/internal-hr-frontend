@@ -1,13 +1,11 @@
-# Internal HR frontend — clear local/staging run
+# Internal HR frontend — local / staging defaults
 #
 # Usage:
 #   docker compose up --build
 #   open http://localhost:8080
 #
-# Override API backend:
-#   API_PROXY_TARGET=https://hr-api.example.com docker compose up --build
-#
-# Or copy .env.docker.example → .env.docker and edit values.
+# Deploy:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.docker up -d --build
 
 name: internal-hr
 
@@ -19,7 +17,7 @@ services:
       args:
         # Baked into the JS bundle at build time (keep /api for same-origin)
         VITE_API_URL: ${VITE_API_URL:-/api}
-    image: internal-hr:local
+    image: internal-hr:${IMAGE_TAG:-local}
     ports:
       - "${APP_PORT:-8080}:80"
     env_file:
