@@ -1,14 +1,15 @@
-# Sourced by the nginx image entrypoint (*.envsh) so exports affect envsubst.
-# Named 18-* to run after IPv6 setup and before 20-envsubst-on-templates.sh.
+# Sourced by nginx entrypoint (*.envsh) before 20-envsubst-on-templates.sh.
+# Never crash the container on missing env — Coolify often omits or sends "".
 
-# Fallback if the platform passes an empty string (overrides Docker ENV)
+DEFAULT_API_PROXY_TARGET="https://hr-api-staging.ellwaa.com"
+
 if [ -z "${API_PROXY_TARGET:-}" ]; then
-  API_PROXY_TARGET="https://hr-api-staging.ellwaa.com"
+  API_PROXY_TARGET="${DEFAULT_API_PROXY_TARGET}"
   export API_PROXY_TARGET
-  echo "WARN: API_PROXY_TARGET was empty; using default ${API_PROXY_TARGET}" >&2
+  echo "WARN: API_PROXY_TARGET empty — using ${API_PROXY_TARGET}"
 fi
 
-# Normalize: strip trailing slash so proxy_pass + /api/... stays correct
+# Strip trailing slash
 case "${API_PROXY_TARGET}" in
   */)
     API_PROXY_TARGET="${API_PROXY_TARGET%/}"
@@ -20,8 +21,9 @@ case "${API_PROXY_TARGET}" in
   http://*|https://*)
     ;;
   *)
-    echo "ERROR: API_PROXY_TARGET must start with http:// or https:// (got: ${API_PROXY_TARGET})" >&2
-    exit 1
+    echo "WARN: API_PROXY_TARGET invalid (${API_PROXY_TARGET}) — using ${DEFAULT_API_PROXY_TARGET}"
+    API_PROXY_TARGET="${DEFAULT_API_PROXY_TARGET}"
+    export API_PROXY_TARGET
     ;;
 esac
 

@@ -4,17 +4,17 @@ dist
 dist-ssr
 *.local
 
-# Git / VCS
+# Git
 .git
 .gitignore
 .gitattributes
 
-# Environment & secrets (never bake into the image)
+# Secrets / local env (never send to build context)
 .env
 .env.*
 !.env.docker.example
 
-# Editor / IDE
+# Editor
 .vscode
 .idea
 *.sw?
@@ -24,7 +24,7 @@ dist-ssr
 *.sln
 .DS_Store
 
-# Logs & coverage
+# Logs / coverage
 logs
 *.log
 npm-debug.log*
@@ -34,7 +34,7 @@ pnpm-debug.log*
 coverage
 .nyc_output
 
-# Tests & lint configs not required for `npm run build`
+# Not needed to build the SPA
 **/*.test.ts
 **/*.test.tsx
 **/*.spec.ts
@@ -42,7 +42,7 @@ coverage
 eslint.config.js
 .editorconfig
 
-# Keep build context lean (docker/ nginx template must remain included)
+# Lean context (docker/ templates MUST stay included)
 Dockerfile*
 docker-compose*.yml
 docker-compose*.yaml
@@ -50,6 +50,6 @@ docker-compose*.yaml
 README.md
 *.md
 
-# Cursor / agent clutter
+# Tooling clutter
 .cursor
 agent-transcripts

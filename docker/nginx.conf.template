@@ -1,5 +1,4 @@
-# Generated at container start from this template (envsubst).
-# Substituted: API_PROXY_TARGET only (see NGINX_ENVSUBST_FILTER in Dockerfile).
+# envsubst replaces ${API_PROXY_TARGET} only (see NGINX_ENVSUBST_FILTER).
 
 server {
     listen 80;
@@ -8,16 +7,12 @@ server {
 
     root /usr/share/nginx/html;
     index index.html;
-
     server_tokens off;
 
-    # Security headers (static SPA)
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
 
-    # Gzip text assets
     gzip on;
     gzip_comp_level 5;
     gzip_min_length 256;
@@ -33,49 +28,36 @@ server {
         image/svg+xml
         font/woff2;
 
-    # Health check (no logging noise)
+    # Coolify / Docker health endpoint
     location = /healthz {
         access_log off;
-        add_header Content-Type text/plain;
+        default_type text/plain;
         return 200 'ok';
     }
 
-    # Proxy API to backend (same-origin /api used by the SPA).
-    # Request /api/auth/login → ${API_PROXY_TARGET}/api/auth/login
+    # SPA → backend: /api/... → ${API_PROXY_TARGET}/api/...
     location /api {
         proxy_pass ${API_PROXY_TARGET};
         proxy_http_version 1.1;
         proxy_ssl_server_name on;
-
         proxy_set_header Host $proxy_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header Connection "";
-
         proxy_connect_timeout 10s;
         proxy_send_timeout 60s;
         proxy_read_timeout 60s;
-
-        # Do not buffer large JSON responses unnecessarily
-        proxy_buffering on;
-        proxy_buffers 16 16k;
     }
 
-    # Hashed Vite assets — long cache
     location /assets/ {
         expires 1y;
         add_header Cache-Control "public, immutable" always;
-        add_header X-Content-Type-Options "nosniff" always;
         try_files $uri =404;
     }
 
-    # HTML / SPA shell — never cache so deploys pick up new asset hashes
     location = /index.html {
         add_header Cache-Control "no-store" always;
-        add_header X-Content-Type-Options "nosniff" always;
-        add_header X-Frame-Options "SAMEORIGIN" always;
-        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     }
 
     location / {
