@@ -5,7 +5,7 @@ import {
 } from 'react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import * as SeparatorPrimitive from '@radix-ui/react-separator'
-import { PanelLeft, X } from 'lucide-react'
+import { Menu, PanelLeft, X } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip'
 import { SidebarContext, useSidebar, type SidebarContextValue } from './sidebar-context'
@@ -25,7 +25,7 @@ export function SidebarProvider({
 
   return (
     <SidebarContext.Provider value={{ collapsed, setCollapsed, openMobile, setOpenMobile }}>
-      <div className="sidebar-provider" data-collapsed={collapsed}>
+      <div className="sidebar-provider" data-collapsed={collapsed} dir="rtl">
         {children}
       </div>
     </SidebarContext.Provider>
@@ -46,10 +46,15 @@ export function Sidebar({ children, className }: { children: ReactNode; classNam
       <DialogPrimitive.Root open={openMobile} onOpenChange={setOpenMobile}>
         <DialogPrimitive.Portal>
           <DialogPrimitive.Overlay className="sidebar-overlay" />
-          <DialogPrimitive.Content className="sidebar-mobile" aria-describedby={undefined}>
+          <DialogPrimitive.Content
+            className="sidebar-mobile"
+            dir="rtl"
+            aria-describedby={undefined}
+            onOpenAutoFocus={(e) => e.preventDefault()}
+          >
             <DialogPrimitive.Title className="sr-only">القائمة الجانبية</DialogPrimitive.Title>
             <SidebarContext.Provider value={mobileCtx}>
-              <aside data-mobile className={cn('sidebar', className)}>
+              <aside data-mobile dir="rtl" className={cn('sidebar', className)}>
                 {children}
               </aside>
             </SidebarContext.Provider>
@@ -166,7 +171,8 @@ export function SidebarTrigger({ className }: { className?: string }) {
       onClick={handleClick}
       aria-label="تبديل القائمة الجانبية"
     >
-      <PanelLeft className="sidebar-trigger-icon" />
+      <Menu className="sidebar-trigger-icon sidebar-trigger-icon-mobile" />
+      <PanelLeft className="sidebar-trigger-icon sidebar-trigger-icon-desktop sidebar-trigger-icon-flip" />
     </button>
   )
 }
@@ -177,7 +183,7 @@ export function SidebarClose({ className }: { className?: string }) {
   return (
     <button
       type="button"
-      className={cn('sidebar-trigger', className)}
+      className={cn('sidebar-trigger sidebar-close-btn', className)}
       aria-label="إغلاق القائمة الجانبية"
       onClick={() => setOpenMobile(false)}
     >

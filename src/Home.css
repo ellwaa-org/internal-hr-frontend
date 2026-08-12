@@ -3,6 +3,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
+  max-width: 100%;
 }
 
 .topbar {
@@ -20,12 +21,17 @@
   font-size: 16px;
   font-weight: 600;
   color: var(--text-h);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .page-content {
   flex: 1;
   padding: 28px;
   overflow: auto;
+  max-width: 100%;
 }
 
 .page-card {
@@ -93,7 +99,29 @@
 }
 
 @media (max-width: 768px) {
+  .topbar {
+    padding: 0 12px;
+    gap: 8px;
+  }
+
+  .topbar-title {
+    font-size: 15px;
+  }
+
   .page-content {
-    padding: 20px;
+    padding: 14px 12px 20px;
+  }
+
+  .page-card {
+    padding: 20px 16px;
+    border-radius: 12px;
+  }
+
+  .welcome-title {
+    font-size: 22px;
+  }
+
+  .stat {
+    min-width: 100%;
   }
 }

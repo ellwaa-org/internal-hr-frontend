@@ -152,7 +152,6 @@ function OfficesPage({
   const [page, setPage] = useState(1)
   const [limit] = useState(10)
   const [search, setSearch] = useState('')
-  const [searchInput, setSearchInput] = useState('')
   const [rewardsFilter, setRewardsFilter] = useState<'all' | 'yes' | 'no'>('all')
   const [wifiFilter, setWifiFilter] = useState<'all' | 'yes' | 'no'>('all')
   const [modal, setModal] = useState<ModalMode>(null)
@@ -431,14 +430,11 @@ function OfficesPage({
           <Search />
           <input
             type="search"
-            value={searchInput}
+            value={search}
             placeholder="بحث باسم المكتب..."
-            onChange={(e) => setSearchInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                setPage(1)
-                setSearch(searchInput)
-              }
+            onChange={(e) => {
+              setPage(1)
+              setSearch(e.target.value)
             }}
           />
         </label>
@@ -481,26 +477,12 @@ function OfficesPage({
           type="button"
           className="btn btn-secondary"
           onClick={() => {
-            setPage(1)
-            setSearch(searchInput)
-          }}
-        >
-          <Search />
-          بحث
-        </button>
-        <button
-          type="button"
-          className="btn btn-secondary"
-          onClick={() => {
-            setSearchInput('')
             setSearch('')
             setRewardsFilter('all')
             setWifiFilter('all')
             setPage(1)
           }}
-          disabled={
-            !searchInput && !search && rewardsFilter === 'all' && wifiFilter === 'all'
-          }
+          disabled={!search && rewardsFilter === 'all' && wifiFilter === 'all'}
         >
           <RotateCcw />
           إعادة تعيين

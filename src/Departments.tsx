@@ -81,7 +81,6 @@ function DepartmentsPage({
   const [page, setPage] = useState(1)
   const [limit] = useState(10)
   const [search, setSearch] = useState('')
-  const [searchInput, setSearchInput] = useState('')
   const [modal, setModal] = useState<ModalMode>(null)
   const [busy, setBusy] = useState(false)
   const [name, setName] = useState('')
@@ -353,14 +352,11 @@ function DepartmentsPage({
           <Search />
           <input
             type="search"
-            value={searchInput}
+            value={search}
             placeholder="بحث باسم الإدارة..."
-            onChange={(e) => setSearchInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                setPage(1)
-                setSearch(searchInput)
-              }
+            onChange={(e) => {
+              setPage(1)
+              setSearch(e.target.value)
             }}
           />
         </label>
@@ -368,22 +364,10 @@ function DepartmentsPage({
           type="button"
           className="btn btn-secondary"
           onClick={() => {
-            setPage(1)
-            setSearch(searchInput)
-          }}
-        >
-          <Search />
-          بحث
-        </button>
-        <button
-          type="button"
-          className="btn btn-secondary"
-          onClick={() => {
-            setSearchInput('')
             setSearch('')
             setPage(1)
           }}
-          disabled={!searchInput && !search}
+          disabled={!search}
         >
           <RotateCcw />
           إعادة تعيين

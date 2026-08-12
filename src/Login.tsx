@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 import logo from './assets/logo.webp'
 import { getDeviceId, login, setToken } from './lib/api'
 import { loginSchema, zodErrorMessage } from './lib/schemas'
@@ -8,6 +9,7 @@ import './Login.css'
 function Login({ onLogin }: { onLogin: (token: string) => void }) {
   const [employeeCode, setEmployeeCode] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [fieldError, setFieldError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -64,14 +66,24 @@ function Login({ onLogin }: { onLogin: (token: string) => void }) {
 
         <label className="login-field" htmlFor="password">
           <span>كلمة المرور</span>
-          <input
-            id="password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-            placeholder="أدخل كلمة المرور"
-          />
+          <div className="login-password-wrap">
+            <input
+              id="password"
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              placeholder="أدخل كلمة المرور"
+            />
+            <button
+              type="button"
+              className="login-password-toggle"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+            >
+              {showPassword ? <EyeOff /> : <Eye />}
+            </button>
+          </div>
         </label>
 
         {fieldError && <p className="login-error">{fieldError}</p>}

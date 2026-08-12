@@ -1,6 +1,7 @@
 .dropdown-content {
-  z-index: 70;
+  z-index: 10000;
   min-width: 220px;
+  max-width: min(280px, calc(100vw - 24px));
   padding: 6px;
   border: 1px solid var(--border, #e5e5e5);
   border-radius: 12px;

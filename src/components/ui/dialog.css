@@ -119,3 +119,25 @@
   justify-content: flex-end;
   margin-top: 20px;
 }
+
+@media (max-width: 720px) {
+  .dialog-content {
+    width: calc(100vw - 16px);
+    max-height: min(92svh, 720px);
+    padding: 18px 16px;
+    border-radius: 14px;
+  }
+
+  .dialog-content-nested {
+    width: calc(100vw - 16px);
+  }
+
+  .dialog-footer {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .dialog-footer .btn {
+    width: 100%;
+  }
+}

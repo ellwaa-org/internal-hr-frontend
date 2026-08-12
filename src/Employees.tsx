@@ -107,7 +107,6 @@ function EmployeesPage({
   const [page, setPage] = useState(1)
   const [limit] = useState(10)
   const [search, setSearch] = useState('')
-  const [searchInput, setSearchInput] = useState('')
   const [roleFilter, setRoleFilter] = useState<'all' | Role>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
   const [modal, setModal] = useState<ModalMode>(null)
@@ -263,14 +262,11 @@ function EmployeesPage({
           <Search />
           <input
             type="search"
-            value={searchInput}
+            value={search}
             placeholder="بحث بالاسم أو الكود أو الهاتف..."
-            onChange={(e) => setSearchInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                setPage(1)
-                setSearch(searchInput)
-              }
+            onChange={(e) => {
+              setPage(1)
+              setSearch(e.target.value)
             }}
           />
         </label>
@@ -315,26 +311,12 @@ function EmployeesPage({
             type="button"
             className="btn btn-secondary"
             onClick={() => {
-              setPage(1)
-              setSearch(searchInput)
-            }}
-          >
-            <Search />
-            بحث
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => {
-              setSearchInput('')
               setSearch('')
               setRoleFilter('all')
               setStatusFilter('all')
               setPage(1)
             }}
-            disabled={
-              !searchInput && !search && roleFilter === 'all' && statusFilter === 'all'
-            }
+            disabled={!search && roleFilter === 'all' && statusFilter === 'all'}
           >
             <RotateCcw />
             إعادة تعيين
