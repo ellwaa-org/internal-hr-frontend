@@ -1,9 +1,11 @@
 # Sourced by the nginx image entrypoint (*.envsh) so exports affect envsubst.
 # Named 18-* to run after IPv6 setup and before 20-envsubst-on-templates.sh.
 
+# Fallback if the platform passes an empty string (overrides Docker ENV)
 if [ -z "${API_PROXY_TARGET:-}" ]; then
-  echo "ERROR: API_PROXY_TARGET is required (e.g. https://hr-api.example.com)" >&2
-  exit 1
+  API_PROXY_TARGET="https://hr-api-staging.ellwaa.com"
+  export API_PROXY_TARGET
+  echo "WARN: API_PROXY_TARGET was empty; using default ${API_PROXY_TARGET}" >&2
 fi
 
 # Normalize: strip trailing slash so proxy_pass + /api/... stays correct
@@ -18,7 +20,7 @@ case "${API_PROXY_TARGET}" in
   http://*|https://*)
     ;;
   *)
-    echo "ERROR: API_PROXY_TARGET must start with http:// or https://" >&2
+    echo "ERROR: API_PROXY_TARGET must start with http:// or https:// (got: ${API_PROXY_TARGET})" >&2
     exit 1
     ;;
 esac

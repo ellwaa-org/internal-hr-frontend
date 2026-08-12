@@ -6,10 +6,13 @@
 # Build:
 #   docker build -t internal-hr:latest .
 #
-# Run (API_PROXY_TARGET is required):
+# Run:
 #   docker run --rm -p 8080:80 \
 #     -e API_PROXY_TARGET=https://hr-api.example.com \
 #     internal-hr:latest
+#
+# Coolify: set env API_PROXY_TARGET (optional — defaults to staging API).
+#          Expose port 80. Built-in wget healthcheck hits /healthz.
 #
 # Compose (local):
 #   docker compose up --build
@@ -60,8 +63,9 @@ LABEL org.opencontainers.image.title="Internal HR System" \
 
 # Only substitute this var in the nginx template (leave $uri / $host alone)
 ENV NGINX_ENVSUBST_FILTER=API_PROXY_TARGET
-# No default backend — must be set at runtime (compose/local or deploy env)
-ENV API_PROXY_TARGET=
+# Default for platforms (Coolify) that don't inject compose env automatically.
+# Override in the host/UI for production: API_PROXY_TARGET=https://hr-api.ellwaa.com
+ENV API_PROXY_TARGET=https://hr-api-staging.ellwaa.com
 
 # Remove default site; use our templated config
 RUN rm -f /etc/nginx/conf.d/default.conf
@@ -79,7 +83,8 @@ EXPOSE 80
 
 STOPSIGNAL SIGQUIT
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+# start-period gives Coolify / orchestrators time before first failure
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
   CMD wget -qO- http://127.0.0.1/healthz >/dev/null || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]
