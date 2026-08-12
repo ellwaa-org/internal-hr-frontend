@@ -1,7 +1,22 @@
-# Sourced by nginx entrypoint (*.envsh) before 20-envsubst-on-templates.sh.
-# Never crash the container on missing env — Coolify often omits or sends "".
+# Sourced before envsubst. Never crash on missing/empty Coolify env.
 
 DEFAULT_API_PROXY_TARGET="https://hr-api-staging.ellwaa.com"
+DEFAULT_PORT="3000"
+
+if [ -z "${PORT:-}" ]; then
+  PORT="${DEFAULT_PORT}"
+  export PORT
+  echo "WARN: PORT empty — using ${PORT}"
+fi
+
+# Coolify sometimes sends PORT with spaces; keep digits only safety
+case "${PORT}" in
+  ''|*[!0-9]*)
+    echo "WARN: PORT invalid (${PORT}) — using ${DEFAULT_PORT}"
+    PORT="${DEFAULT_PORT}"
+    export PORT
+    ;;
+esac
 
 if [ -z "${API_PROXY_TARGET:-}" ]; then
   API_PROXY_TARGET="${DEFAULT_API_PROXY_TARGET}"
@@ -9,7 +24,6 @@ if [ -z "${API_PROXY_TARGET:-}" ]; then
   echo "WARN: API_PROXY_TARGET empty — using ${API_PROXY_TARGET}"
 fi
 
-# Strip trailing slash
 case "${API_PROXY_TARGET}" in
   */)
     API_PROXY_TARGET="${API_PROXY_TARGET%/}"
@@ -27,4 +41,5 @@ case "${API_PROXY_TARGET}" in
     ;;
 esac
 
+echo "Listening on port: ${PORT}"
 echo "API proxy target: ${API_PROXY_TARGET}"
