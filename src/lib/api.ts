@@ -8,9 +8,12 @@ const DEVICE_KEY = 'hr_device_id'
 
 import { translateErrorMessage } from './errors'
 import {
+  changePasswordSchema,
   createDepartmentSchema,
   createOfficeSchema,
+  exportAttendanceExcelParamsSchema,
   listAttendanceParamsSchema,
+  listAttendanceUsersParamsSchema,
   listDepartmentsParamsSchema,
   listOfficesParamsSchema,
   listUsersParamsSchema,
@@ -21,12 +24,20 @@ import {
   updateOfficeSchema,
   updateUserSchema,
   type AttendanceRecord,
+  type AttendanceTask,
+  type AttendanceType,
+  type AttendanceUserItem,
+  type AttendanceUserStatus,
+  type ChangePasswordInput,
   type CreateDepartmentInput,
   type CreateOfficeInput,
   type DayStatus,
   type DepartmentOption,
   type DepartmentRecord,
+  type ExportAttendanceExcelParams,
+  type JustificationStatus,
   type ListAttendanceParams,
+  type ListAttendanceUsersParams,
   type ListDepartmentsParams,
   type ListOfficesParams,
   type ListUsersParams,
@@ -34,6 +45,7 @@ import {
   type OfficeOption,
   type OfficeRecord,
   type PaginatedAttendance,
+  type PaginatedAttendanceUsers,
   type PaginatedDepartments,
   type PaginatedOffices,
   type PaginatedUsers,
@@ -48,12 +60,20 @@ import {
 
 export type {
   AttendanceRecord,
+  AttendanceTask,
+  AttendanceType,
+  AttendanceUserItem,
+  AttendanceUserStatus,
+  ChangePasswordInput,
   CreateDepartmentInput,
   CreateOfficeInput,
   DayStatus,
   DepartmentOption,
   DepartmentRecord,
+  ExportAttendanceExcelParams,
+  JustificationStatus,
   ListAttendanceParams,
+  ListAttendanceUsersParams,
   ListDepartmentsParams,
   ListOfficesParams,
   ListUsersParams,
@@ -61,6 +81,7 @@ export type {
   OfficeOption,
   OfficeRecord,
   PaginatedAttendance,
+  PaginatedAttendanceUsers,
   PaginatedDepartments,
   PaginatedOffices,
   PaginatedUsers,
@@ -157,8 +178,41 @@ export async function login(input: LoginInput): Promise<string> {
   return token
 }
 
-export function getProfile(token: string): Promise<Profile> {
-  return request<Profile>('/auth/profile', {}, token)
+export async function getProfile(token: string): Promise<Profile> {
+  const raw = await request<Record<string, unknown>>('/auth/profile', {}, token)
+  const user = asUserRecord(raw)
+  return {
+    id: user.id,
+    fullName: user.fullName,
+    phoneNumber: user.phoneNumber,
+    email: user.email,
+    role: user.role,
+    employeeCode: user.employeeCode,
+    deviceId: user.deviceId,
+    points: user.points,
+    isActive: user.isActive,
+    bio: user.bio ?? null,
+    departmentId: user.departmentId ?? null,
+    officeId: user.officeId ?? null,
+  }
+}
+
+export function changePassword(
+  token: string,
+  input: ChangePasswordInput,
+): Promise<unknown> {
+  const payload = parseOrThrow(changePasswordSchema, input)
+  return request(
+    '/auth/change-password',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        currentPassword: payload.currentPassword,
+        newPassword: payload.newPassword,
+      }),
+    },
+    token,
+  )
 }
 
 function toQuery(params: Record<string, string | number | boolean | undefined | null>): string {
@@ -189,14 +243,15 @@ function asUserRecord(raw: Record<string, unknown>): UserRecord {
 
   return {
     id: Number(raw.id),
-    fullName: String(raw.fullName ?? ''),
+    fullName: String(raw.fullName ?? raw.name ?? raw.userName ?? ''),
     phoneNumber: String(raw.phoneNumber ?? ''),
     email: (raw.email as string | null) ?? null,
     role: (raw.role as Role) ?? 'EMPLOYEE',
-    employeeCode: String(raw.employeeCode ?? ''),
+    employeeCode: String(raw.employeeCode ?? raw.code ?? ''),
     deviceId: (raw.deviceId as string | null) ?? null,
     points: Number(raw.points ?? 0),
     isActive: Boolean(raw.isActive ?? true),
+    bio: raw.bio == null || raw.bio === '' ? null : String(raw.bio),
     departmentId:
       raw.departmentId === null || raw.departmentId === undefined
         ? department?.id ?? null
@@ -325,34 +380,294 @@ function asOfficeRecord(raw: Record<string, unknown>): OfficeRecord {
   }
 }
 
-function asAttendanceRecord(raw: Record<string, unknown>): AttendanceRecord {
-  const userRaw = raw.user
-  const user =
-    userRaw && typeof userRaw === 'object'
-      ? asUserRecord(userRaw as Record<string, unknown>)
-      : undefined
+function pickString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value
+  }
+  return null
+}
+
+function pickNumber(...values: unknown[]): number | null {
+  for (const value of values) {
+    if (value === null || value === undefined || value === '') continue
+    const n = Number(value)
+    if (Number.isFinite(n)) return n
+  }
+  return null
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
+}
+
+function asAttendanceTask(
+  raw: Record<string, unknown>,
+  fallbackUser?: AttendanceRecord['user'],
+  fallbackUserId?: number,
+  fallbackDate?: string,
+): AttendanceTask {
+  const userRaw = asRecord(raw.user)
+  const nestedUser = userRaw
+  const nestedFullName = nestedUser
+    ? pickString(nestedUser.fullName, nestedUser.name, nestedUser.userName)
+    : null
+  const nestedCode = nestedUser
+    ? pickString(nestedUser.employeeCode, nestedUser.code)
+    : null
 
   return {
-    id: String(raw.id ?? ''),
-    userId: raw.userId !== undefined ? Number(raw.userId) : user?.id,
-    officeId:
-      raw.officeId === null || raw.officeId === undefined ? null : Number(raw.officeId),
-    date: raw.date as string | undefined,
-    dayStatus: raw.dayStatus as AttendanceRecord['dayStatus'],
-    checkInAt: (raw.checkInAt as string | null) ?? null,
-    checkOutAt: (raw.checkOutAt as string | null) ?? null,
-    isLate: raw.isLate !== undefined ? Boolean(raw.isLate) : undefined,
-    isEarlyLeave: raw.isEarlyLeave !== undefined ? Boolean(raw.isEarlyLeave) : undefined,
-    lateReason: (raw.lateReason as string | null) ?? null,
-    earlyLeaveReason: (raw.earlyLeaveReason as string | null) ?? null,
-    lateJustificationStatus:
-      (raw.lateJustificationStatus as AttendanceRecord['lateJustificationStatus']) ?? null,
-    earlyLeaveJustificationStatus:
-      (raw.earlyLeaveJustificationStatus as AttendanceRecord['earlyLeaveJustificationStatus']) ??
-      null,
-    notes: (raw.notes as string | null) ?? null,
+    id: String(raw.id ?? raw.taskId ?? ''),
+    taskName: pickString(raw.taskName, raw.name) ?? undefined,
+    lat: pickNumber(raw.startLat, raw.lat, raw.latitude, raw.checkInLat),
+    lng: pickNumber(raw.startLng, raw.lng, raw.longitude, raw.checkInLng),
+    addressName: pickString(raw.addressName, raw.address, raw.locationName),
+    mapLink: pickString(raw.mapLink, raw.mapUrl, raw.googleMapsLink),
+    startedAt: pickString(
+      raw.startTime,
+      raw.startedAt,
+      raw.startAt,
+      raw.checkInTime,
+      raw.checkInAt,
+    ),
+    endedAt: pickString(
+      raw.endTime,
+      raw.endedAt,
+      raw.endAt,
+      raw.checkOutTime,
+      raw.checkOutAt,
+    ),
+    workDurationMinutes: pickNumber(raw.workDurationMinutes, raw.durationMinutes),
+    userId:
+      raw.userId !== undefined && raw.userId !== null
+        ? Number(raw.userId)
+        : nestedUser?.id !== undefined
+          ? Number(nestedUser.id)
+          : fallbackUserId,
+    attendanceId:
+      raw.attendanceId === null || raw.attendanceId === undefined
+        ? null
+        : String(raw.attendanceId),
+    date: pickString(raw.date, fallbackDate) ?? undefined,
+    user: nestedUser
+      ? {
+          id: nestedUser.id !== undefined ? Number(nestedUser.id) : undefined,
+          fullName: nestedFullName ?? fallbackUser?.fullName,
+          employeeCode: nestedCode ?? fallbackUser?.employeeCode,
+        }
+      : fallbackUser
+        ? {
+            id: fallbackUser.id,
+            fullName: fallbackUser.fullName,
+            employeeCode: fallbackUser.employeeCode,
+          }
+        : undefined,
+  }
+}
+
+function asAttendanceRecord(raw: Record<string, unknown>): AttendanceRecord {
+  const attendance = asRecord(raw.attendance) ?? raw
+  const task = asRecord(raw.task)
+  const firstListedTask = Array.isArray(raw.tasks)
+    ? asRecord(raw.tasks[0])
+    : Array.isArray(raw.attendanceTasks)
+      ? asRecord(raw.attendanceTasks[0])
+      : null
+  const userRaw =
+    asRecord(raw.user) ??
+    asRecord(attendance.user) ??
+    asRecord(task?.user) ??
+    asRecord(firstListedTask?.user)
+  const user = userRaw
+    ? {
+        id: pickNumber(userRaw.id) ?? undefined,
+        fullName:
+          pickString(userRaw.fullName, userRaw.name, userRaw.userName) ?? undefined,
+        employeeCode: pickString(userRaw.employeeCode, userRaw.code) ?? undefined,
+        role: userRaw.role as UserRecord['role'] | undefined,
+        phoneNumber: pickString(userRaw.phoneNumber) ?? undefined,
+        email: (userRaw.email as string | null | undefined) ?? undefined,
+        deviceId: (userRaw.deviceId as string | null | undefined) ?? undefined,
+        points: pickNumber(userRaw.points) ?? undefined,
+        isActive:
+          userRaw.isActive === undefined ? undefined : Boolean(userRaw.isActive),
+        departmentId: pickNumber(userRaw.departmentId),
+        officeId: pickNumber(userRaw.officeId),
+      }
+    : undefined
+  const officeRaw = asRecord(raw.office) ?? asRecord(attendance.office) ?? asRecord(task?.office)
+
+  const userId =
+    pickNumber(
+      attendance.userId,
+      task?.userId,
+      raw.userId,
+      firstListedTask?.userId,
+      user?.id,
+    ) ?? undefined
+  const officeId = pickNumber(attendance.officeId, task?.officeId, raw.officeId)
+  const date =
+    pickString(attendance.date, task?.date, raw.date) ?? undefined
+
+  const checkInAt = pickString(
+    attendance.checkInTime,
+    attendance.checkInAt,
+    task?.startTime,
+    raw.checkInTime,
+    raw.checkInAt,
+  )
+  const checkOutAt = pickString(
+    attendance.checkOutTime,
+    attendance.checkOutAt,
+    task?.endTime,
+    raw.checkOutTime,
+    raw.checkOutAt,
+  )
+
+  const lateReasonValue = raw.lateReason ?? attendance.lateReason
+  const earlyLeaveReasonValue = raw.earlyLeaveReason ?? attendance.earlyLeaveReason
+  const lateReason =
+    lateReasonValue === null || lateReasonValue === undefined
+      ? null
+      : String(lateReasonValue)
+  const earlyLeaveReason =
+    earlyLeaveReasonValue === null || earlyLeaveReasonValue === undefined
+      ? null
+      : String(earlyLeaveReasonValue)
+
+  const lateJustificationStatus = (pickString(
+    raw.lateJustificationStatus,
+    attendance.lateJustificationStatus,
+  ) ??
+    (raw.lateJustificationStatus === null || attendance.lateJustificationStatus === null
+      ? null
+      : undefined)) as AttendanceRecord['lateJustificationStatus']
+
+  const earlyLeaveJustificationStatus = (pickString(
+    raw.earlyLeaveJustificationStatus,
+    attendance.earlyLeaveJustificationStatus,
+  ) ??
+    (raw.earlyLeaveJustificationStatus === null ||
+    attendance.earlyLeaveJustificationStatus === null
+      ? null
+      : undefined)) as AttendanceRecord['earlyLeaveJustificationStatus']
+
+  const taskName = pickString(task?.taskName, attendance.taskName, raw.taskName) ?? undefined
+  const addressName = pickString(
+    task?.addressName,
+    attendance.addressName,
+    raw.addressName,
+  )
+  const mapLink = pickString(task?.mapLink, attendance.mapLink, raw.mapLink)
+  const startedAt = pickString(task?.startTime, attendance.startTime, checkInAt)
+  const endedAt = pickString(task?.endTime, attendance.endTime, checkOutAt)
+  const workDurationMinutes = pickNumber(
+    task?.workDurationMinutes,
+    attendance.workDurationMinutes,
+    raw.workDurationMinutes,
+  )
+  const lat = pickNumber(
+    task?.startLat,
+    attendance.checkInLat,
+    attendance.lat,
+    raw.lat,
+  )
+  const lng = pickNumber(
+    task?.startLng,
+    attendance.checkInLng,
+    attendance.lng,
+    raw.lng,
+  )
+
+  const nestedTasks = Array.isArray(raw.tasks)
+    ? (raw.tasks as Record<string, unknown>[]).map((item) =>
+        asAttendanceTask(item, user, userId, date),
+      )
+    : Array.isArray(raw.attendanceTasks)
+      ? (raw.attendanceTasks as Record<string, unknown>[]).map((item) =>
+          asAttendanceTask(item, user, userId, date),
+        )
+      : undefined
+
+  const type =
+    (pickString(raw.type, attendance.type, task ? 'task' : undefined) as
+      | AttendanceType
+      | undefined) ?? undefined
+
+  const id = String(
+    (type === 'task' ? task?.id : undefined) ??
+      attendance.id ??
+      task?.id ??
+      raw.id ??
+      '',
+  )
+
+  const builtTask =
+    task
+      ? asAttendanceTask(task, user, userId, date)
+      : type === 'task' || taskName || addressName || mapLink
+        ? asAttendanceTask(
+            {
+              id,
+              taskName,
+              addressName,
+              mapLink,
+              startTime: startedAt,
+              endTime: endedAt,
+              workDurationMinutes,
+              startLat: lat,
+              startLng: lng,
+              userId,
+              date,
+              attendanceId: attendance.attendanceId ?? null,
+            },
+            user,
+            userId,
+            date,
+          )
+        : undefined
+
+  return {
+    id,
+    userId,
+    officeId,
+    date,
+    dayStatus: (raw.dayStatus ?? attendance.dayStatus) as AttendanceRecord['dayStatus'],
+    type,
+    checkInAt,
+    checkOutAt,
+    isLate:
+      raw.isLate !== undefined
+        ? Boolean(raw.isLate)
+        : attendance.isLate !== undefined
+          ? Boolean(attendance.isLate)
+          : pickString(attendance.checkInStatus) === 'late'
+            ? true
+            : undefined,
+    isEarlyLeave:
+      raw.isEarlyLeave !== undefined
+        ? Boolean(raw.isEarlyLeave)
+        : attendance.isEarlyLeave !== undefined
+          ? Boolean(attendance.isEarlyLeave)
+          : pickString(attendance.checkOutStatus) === 'early'
+            ? true
+            : undefined,
+    lateReason,
+    earlyLeaveReason,
+    lateJustificationStatus: lateJustificationStatus ?? null,
+    earlyLeaveJustificationStatus: earlyLeaveJustificationStatus ?? null,
+    notes: pickString(raw.notes, attendance.notes, task?.notes),
+    rewardPoints: pickNumber(raw.rewardPoints, attendance.rewardPoints) ?? undefined,
+    taskName,
+    lat,
+    lng,
+    addressName,
+    mapLink,
+    startedAt,
+    endedAt,
+    workDurationMinutes,
+    tasks: nestedTasks ?? (builtTask ? [builtTask] : undefined),
     user,
-    office: asNestedOption(raw.office),
+    office: asNestedOption(officeRaw),
   }
 }
 
@@ -692,6 +1007,7 @@ export async function listAttendance(
     from: validated.from,
     to: validated.to,
     dayStatus: validated.dayStatus,
+    type: validated.type,
     page,
     limit,
   })
@@ -700,8 +1016,206 @@ export async function listAttendance(
     body,
     page,
     limit,
-    ['data', 'attendance', 'items', 'results', 'records'],
+    ['data', 'attendance', 'items', 'results', 'records', 'tasks'],
     asAttendanceRecord,
+  )
+}
+
+function asAttendanceUserItem(raw: Record<string, unknown>): AttendanceUserItem {
+  const userRaw = asRecord(raw.user) ?? raw
+  const user = asUserRecord({
+    phoneNumber: '',
+    email: null,
+    deviceId: null,
+    isActive: true,
+    points: 0,
+    role: 'EMPLOYEE',
+    ...userRaw,
+  })
+
+  const attendanceSource = Array.isArray(raw.attendance)
+    ? (raw.attendance as Record<string, unknown>[])
+    : Array.isArray(raw.records)
+      ? (raw.records as Record<string, unknown>[])
+      : []
+
+  return {
+    user: {
+      id: user.id,
+      fullName: user.fullName,
+      employeeCode: user.employeeCode,
+      role: user.role,
+      points: user.points,
+      departmentId: user.departmentId,
+      officeId: user.officeId,
+      isActive: user.isActive,
+      phoneNumber: user.phoneNumber,
+      email: user.email,
+      deviceId: user.deviceId,
+      department: user.department,
+      office: user.office,
+    },
+    from: pickString(raw.from) ?? undefined,
+    to: pickString(raw.to) ?? undefined,
+    absentFrom: pickString(raw.absentFrom) ?? undefined,
+    absentTo: pickString(raw.absentTo) ?? undefined,
+    absentDays: Array.isArray(raw.absentDays)
+      ? (raw.absentDays as unknown[]).map(String)
+      : undefined,
+    absentCount:
+      raw.absentCount !== undefined
+        ? Number(raw.absentCount)
+        : Array.isArray(raw.absentDays)
+          ? raw.absentDays.length
+          : undefined,
+    isAbsent: raw.isAbsent !== undefined ? Boolean(raw.isAbsent) : undefined,
+    attendance: attendanceSource.map((item) => {
+      const record = asAttendanceRecord(item)
+      return {
+        ...record,
+        userId: record.userId ?? user.id,
+        user: record.user ?? {
+          id: user.id,
+          fullName: user.fullName,
+          employeeCode: user.employeeCode,
+        },
+        officeId: record.officeId ?? user.officeId ?? null,
+      }
+    }),
+  }
+}
+
+export async function listAttendanceUsers(
+  token: string,
+  params: ListAttendanceUsersParams = {},
+): Promise<PaginatedAttendanceUsers> {
+  const validated = parseOrThrow(listAttendanceUsersParamsSchema, params)
+  const page = validated.page ?? 1
+  const limit = validated.limit ?? 20
+  const qs = toQuery({
+    from: validated.from,
+    to: validated.to,
+    currentCycle: validated.currentCycle,
+    type: validated.type,
+    status: validated.status,
+    officeId: validated.officeId,
+    departmentId: validated.departmentId,
+    absentFrom: validated.absentFrom,
+    absentTo: validated.absentTo,
+    hasAbsent: validated.hasAbsent,
+    page,
+    limit,
+  })
+  const path = validated.today ? `/attendance/users/today${qs}` : `/attendance/users${qs}`
+  const body = await request<unknown>(path, {}, token)
+  return normalizePaginated(
+    body,
+    page,
+    limit,
+    ['data', 'users', 'items', 'results'],
+    asAttendanceUserItem,
+  )
+}
+
+export async function getAttendance(
+  token: string,
+  id: string,
+): Promise<AttendanceRecord> {
+  const body = await request<unknown>(`/attendance/${id}`, {}, token)
+  const raw =
+    body && typeof body === 'object' && 'data' in (body as object)
+      ? ((body as { data: unknown }).data as Record<string, unknown>)
+      : (body as Record<string, unknown>)
+  return asAttendanceRecord(raw)
+}
+
+export async function getUserAttendance(
+  token: string,
+  userId: number,
+  params: Omit<ListAttendanceParams, 'userId' | 'officeId'> = {},
+): Promise<PaginatedAttendance> {
+  const validated = parseOrThrow(listAttendanceParamsSchema, { ...params, userId })
+  const page = validated.page ?? 1
+  const limit = validated.limit ?? 31
+  const qs = toQuery({
+    from: validated.from,
+    to: validated.to,
+    type: validated.type,
+    page,
+    limit,
+  })
+  const body = await request<unknown>(`/attendance/user/${userId}${qs}`, {}, token)
+  return normalizePaginated(
+    body,
+    page,
+    limit,
+    ['data', 'attendance', 'items', 'results', 'records', 'history', 'tasks'],
+    asAttendanceRecord,
+  )
+}
+
+async function downloadBinary(
+  path: string,
+  token: string,
+  fallbackFilename: string,
+): Promise<void> {
+  const url = path.startsWith('http')
+    ? path
+    : `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+
+  if (!res.ok) {
+    let message = translateErrorMessage(`Request failed (${res.status})`, res.status)
+    try {
+      message = errorMessageFromBody(await res.json(), message, res.status)
+    } catch {
+      // non-JSON error body
+    }
+    throw new Error(message)
+  }
+
+  const blob = await res.blob()
+  const disposition = res.headers.get('content-disposition')
+  const matched = disposition?.match(/filename\*?=(?:UTF-8''|")?([^\";]+)/i)
+  const filename = matched?.[1]
+    ? decodeURIComponent(matched[1].replace(/"/g, ''))
+    : fallbackFilename
+
+  const objectUrl = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = objectUrl
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(objectUrl)
+}
+
+export async function exportTaskAttendanceExcel(
+  token: string,
+  params: ExportAttendanceExcelParams,
+): Promise<void> {
+  const validated = parseOrThrow(exportAttendanceExcelParamsSchema, params)
+  const qs = toQuery({ from: validated.from, to: validated.to })
+  await downloadBinary(
+    `/attendance/task/excel${qs}`,
+    token,
+    `task-attendance-${validated.from}_${validated.to}.xlsx`,
+  )
+}
+
+export async function exportOfficeAttendanceExcel(
+  token: string,
+  params: ExportAttendanceExcelParams,
+): Promise<void> {
+  const validated = parseOrThrow(exportAttendanceExcelParamsSchema, params)
+  const qs = toQuery({ from: validated.from, to: validated.to })
+  await downloadBinary(
+    `/attendance/office/excel${qs}`,
+    token,
+    `office-attendance-${validated.from}_${validated.to}.xlsx`,
   )
 }
 

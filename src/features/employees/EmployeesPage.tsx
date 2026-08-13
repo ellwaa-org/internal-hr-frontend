@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+﻿import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   KeyRound,
@@ -9,7 +9,6 @@ import {
   Power,
   RefreshCw,
   RotateCcw,
-  Search,
   Smartphone,
   Trash2,
   UserPlus,
@@ -30,16 +29,28 @@ import {
   type Role,
   type UpdateUserInput,
   type UserRecord,
-} from './lib/api'
-import { isUnauthorizedError } from './lib/errors'
-import { queryKeys, QUERY_STALE_TIME } from './lib/query-client'
+} from '@/lib/api'
+import { isUnauthorizedError } from '@/lib/errors'
+import { queryKeys, QUERY_STALE_TIME_FREQUENT } from '@/lib/query-client'
 import {
   registerUserSchema,
   updateUserSchema,
   zodErrorMessage,
-} from './lib/schemas'
-import { notify } from './lib/toast'
-import { Checkbox } from './components/ui/checkbox'
+} from '@/lib/schemas'
+import { notify } from '@/lib/toast'
+import { useDialogState } from '@/lib/use-dialog-state'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
+import {
+  FiltersBar,
+  PageHeader,
+  PageShell,
+  PaginationBar,
+  SearchField,
+} from '@/components/ui/page'
+import { Table, TableMessage, TableSection, Td, TdActions, Th, ThActions, Tr } from '@/components/ui/table'
 import {
   Dialog,
   DialogBody,
@@ -48,7 +59,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from './components/ui/dialog'
+} from '@/components/ui/dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -56,15 +67,14 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from './components/ui/dropdown-menu'
+} from '@/components/ui/dropdown-menu'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from './components/ui/select'
-import './Employees.css'
+} from '@/components/ui/select'
 
 const ROLE_LABELS: Record<Role, string> = {
   ADMIN: 'مدير النظام',
@@ -105,14 +115,12 @@ function EmployeesPage({
 }) {
   const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
-  const [limit] = useState(10)
+  const [limit] = useState(20)
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<'all' | Role>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
   const [modal, setModal] = useState<ModalMode>(null)
   const [busy, setBusy] = useState(false)
-  const [departments, setDepartments] = useState<DepartmentOption[]>([])
-  const [offices, setOffices] = useState<OfficeOption[]>([])
 
   const handleApiError = useCallback(
     (err: unknown, fallback: string) => {
@@ -139,7 +147,8 @@ function EmployeesPage({
 
   const usersQuery = useQuery({
     queryKey: queryKeys.users.list(listParams),
-    staleTime: QUERY_STALE_TIME,
+    staleTime: QUERY_STALE_TIME_FREQUENT,
+    refetchInterval: QUERY_STALE_TIME_FREQUENT,
     queryFn: () =>
       listUsers(token, {
         page,
@@ -148,6 +157,20 @@ function EmployeesPage({
         role: roleFilter === 'all' ? undefined : roleFilter,
         isActive: statusFilter === 'all' ? undefined : statusFilter === 'active',
       }),
+  })
+
+  const departmentsQuery = useQuery({
+    queryKey: queryKeys.departments.options(),
+    staleTime: QUERY_STALE_TIME_FREQUENT,
+    refetchInterval: QUERY_STALE_TIME_FREQUENT,
+    queryFn: () => listDepartmentOptions(token, { limit: 100 }),
+  })
+
+  const officesQuery = useQuery({
+    queryKey: queryKeys.offices.options(),
+    staleTime: QUERY_STALE_TIME_FREQUENT,
+    refetchInterval: QUERY_STALE_TIME_FREQUENT,
+    queryFn: () => listOfficeOptions(token, { limit: 100 }),
   })
 
   useEffect(() => {
@@ -159,34 +182,22 @@ function EmployeesPage({
   const users = usersQuery.data?.data ?? []
   const total = usersQuery.data?.total ?? 0
   const totalPages = Math.max(1, usersQuery.data?.totalPages ?? 1)
-  const loading = usersQuery.isLoading || usersQuery.isFetching
+  const loading = usersQuery.isLoading || (usersQuery.isFetching && users.length === 0)
+  const departments = departmentsQuery.data ?? []
+  const offices = officesQuery.data ?? []
 
   const invalidateUsers = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: queryKeys.users.all })
   }, [queryClient])
 
-  useEffect(() => {
-    let cancelled = false
-    Promise.all([
-      listDepartmentOptions(token, { limit: 100 }),
-      listOfficeOptions(token, { limit: 100 }),
-    ])
-      .then(([deptItems, officeItems]) => {
-        if (cancelled) return
-        setDepartments(deptItems)
-        setOffices(officeItems)
-      })
-      .catch(() => {
-        // Department/office lists are optional helpers for the forms.
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [token])
-
   const closeModal = () => {
     if (!busy) setModal(null)
   }
+
+  const confirmDialog = useDialogState(modal?.type === 'confirm' ? modal : null)
+  const createDialog = useDialogState(modal?.type === 'create' ? modal : null)
+  const updateDialog = useDialogState(modal?.type === 'update' ? modal : null)
+  const confirmUpdateDialog = useDialogState(modal?.type === 'confirm-update' ? modal : null)
 
   const runConfirm = async (action: ConfirmAction, user: UserRecord) => {
     setBusy(true)
@@ -245,31 +256,27 @@ function EmployeesPage({
   }, [page, limit, total])
 
   return (
-    <div className="employees-page">
-      <div className="employees-toolbar">
-        <div className="employees-toolbar-text">
-          <h1 className="employees-title">الموظفون</h1>
-          <p className="employees-subtitle">إدارة حسابات الموظفين والصلاحيات</p>
-        </div>
-        <button type="button" className="btn btn-primary" onClick={() => setModal({ type: 'create' })}>
-          <Plus />
-          إضافة موظف
-        </button>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="الموظفون"
+        subtitle="إدارة حسابات الموظفين والصلاحيات"
+        action={
+          <Button type="button" onClick={() => setModal({ type: 'create' })} variant="primary" fullOnMobile>
+            <Plus />
+            إضافة موظف
+          </Button>
+        }
+      />
 
-      <div className="employees-filters">
-        <label className="employees-search">
-          <Search />
-          <input
-            type="search"
-            value={search}
-            placeholder="بحث بالاسم أو الكود أو الهاتف..."
-            onChange={(e) => {
-              setPage(1)
-              setSearch(e.target.value)
-            }}
-          />
-        </label>
+      <FiltersBar>
+        <SearchField
+          value={search}
+          placeholder="بحث بالاسم أو الكود أو الهاتف..."
+          onChange={(e) => {
+            setPage(1)
+            setSearch(e.target.value)
+          }}
+        />
 
         <Select
           value={roleFilter}
@@ -278,7 +285,7 @@ function EmployeesPage({
             setRoleFilter(value as 'all' | Role)
           }}
         >
-          <SelectTrigger className="employees-select-trigger" aria-label="تصفية حسب الدور">
+          <SelectTrigger className="min-w-[150px] max-[720px]:w-full max-[720px]:min-w-0" aria-label="تصفية حسب الدور">
             <SelectValue placeholder="كل الأدوار" />
           </SelectTrigger>
           <SelectContent>
@@ -296,7 +303,7 @@ function EmployeesPage({
             setStatusFilter(value as 'all' | 'active' | 'inactive')
           }}
         >
-          <SelectTrigger className="employees-select-trigger" aria-label="تصفية حسب الحالة">
+          <SelectTrigger className="min-w-[150px] max-[720px]:w-full max-[720px]:min-w-0" aria-label="تصفية حسب الحالة">
             <SelectValue placeholder="كل الحالات" />
           </SelectTrigger>
           <SelectContent>
@@ -306,24 +313,22 @@ function EmployeesPage({
           </SelectContent>
         </Select>
 
-        <div className="employees-filters-actions">
-          <button
+        <div className="ms-auto flex flex-wrap items-center gap-2 max-[720px]:ms-0 max-[720px]:w-full [&_button]:max-[720px]:flex-1">
+          <Button
             type="button"
-            className="btn btn-secondary"
             onClick={() => {
               setSearch('')
               setRoleFilter('all')
               setStatusFilter('all')
               setPage(1)
-            }}
+            }} variant="secondary"
             disabled={!search && roleFilter === 'all' && statusFilter === 'all'}
           >
             <RotateCcw />
             إعادة تعيين
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className="btn btn-secondary"
             onClick={() => {
               void (async () => {
                 const toastId = notify.loading('جارٍ تحديث الموظفين...')
@@ -337,80 +342,102 @@ function EmployeesPage({
                   handleApiError(err, 'تعذر تحديث الموظفين')
                 }
               })()
-            }}
+            }} variant="secondary" className="w-10 p-0"
             disabled={usersQuery.isFetching}
             aria-label="تحديث"
+            title="تحديث"
           >
-            {usersQuery.isFetching ? <Loader2 className="spin" /> : <RefreshCw />}
-            تحديث
-          </button>
+            {usersQuery.isFetching ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+          </Button>
         </div>
-      </div>
+      </FiltersBar>
 
-      <div className="employees-table-wrap">
-        <table className="employees-table">
+      <TableSection
+        footer={
+          <PaginationBar
+            info={pageLabel}
+            page={page}
+            totalPages={totalPages}
+            disabled={loading}
+            onPrev={() => setPage((p) => Math.max(1, p - 1))}
+            onNext={() => setPage((p) => p + 1)}
+          />
+        }
+      >
+        <Table>
           <thead>
             <tr>
-              <th>الاسم</th>
-              <th>كود الموظف</th>
-              <th>الدور</th>
-              <th>الهاتف</th>
-              <th>البريد</th>
-              <th>الحالة</th>
-              <th>النقاط</th>
-              <th>الجهاز</th>
-              <th className="col-actions">إجراءات</th>
+              <Th>الاسم</Th>
+              <Th>كود الموظف</Th>
+              <Th>الدور</Th>
+              <Th>الهاتف</Th>
+              <Th>البريد</Th>
+              <Th>الحالة</Th>
+              <Th>النقاط</Th>
+              <Th>الجهاز</Th>
+              <ThActions>إجراءات</ThActions>
             </tr>
           </thead>
           <tbody>
             {loading && users.length === 0 ? (
-              <tr>
-                <td colSpan={9} className="employees-empty">
-                  <Loader2 className="spin" />
-                  جارٍ تحميل الموظفين...
-                </td>
-              </tr>
+              <TableMessage colSpan={9}>
+                <Loader2 className="me-2 inline-block animate-spin align-[-3px]" />
+                جارٍ تحميل الموظفين...
+              </TableMessage>
             ) : users.length === 0 ? (
-              <tr>
-                <td colSpan={9} className="employees-empty">
-                  لا يوجد موظفون مطابقون
-                </td>
-              </tr>
+              <TableMessage colSpan={9}>لا يوجد موظفون مطابقون</TableMessage>
             ) : (
               users.map((user) => (
-                <tr key={user.id}>
-                  <td>
-                    <div className="employee-name-cell">
-                      <span className="employee-name">{user.fullName}</span>
+                <Tr key={user.id}>
+                  <Td>
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <span className="font-semibold text-foreground">{user.fullName}</span>
                       {(user.department?.name || user.office?.name) && (
-                        <span className="employee-dept">
+                        <span className="truncate text-xs text-muted">
                           {[user.department?.name, user.office?.name].filter(Boolean).join(' · ')}
                         </span>
                       )}
                     </div>
-                  </td>
-                  <td>
-                    <code className="employee-code">{user.employeeCode}</code>
-                  </td>
-                  <td>{ROLE_LABELS[user.role]}</td>
-                  <td>{user.phoneNumber || '—'}</td>
-                  <td>{user.email || '—'}</td>
-                  <td>
-                    <span className={`status-pill ${user.isActive ? 'is-active' : 'is-inactive'}`}>
+                  </Td>
+                  <Td>
+                    <code className="rounded-md bg-neutral-100 px-1.5 py-0.5 font-mono text-xs text-foreground">
+                      {user.employeeCode}
+                    </code>
+                  </Td>
+                  <Td className="whitespace-nowrap">{ROLE_LABELS[user.role]}</Td>
+                  <Td className="whitespace-nowrap text-muted">{user.phoneNumber || '—'}</Td>
+                  <Td>
+                    <span className="block max-w-[240px] truncate text-muted" title={user.email || undefined}>
+                      {user.email || '—'}
+                    </span>
+                  </Td>
+                  <Td>
+                    <span
+                      className={cn(
+                        'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold',
+                        user.isActive ? 'bg-success-soft text-success' : 'bg-danger-soft text-red-700',
+                      )}
+                    >
                       {user.isActive ? 'نشط' : 'متوقف'}
                     </span>
-                  </td>
-                  <td>{user.points}</td>
-                  <td>{user.deviceId ? 'مربوط' : '—'}</td>
-                  <td className="col-actions">
+                  </Td>
+                  <Td className="tabular-nums">{user.points}</Td>
+                  <Td className="text-muted">{user.deviceId ? 'مربوط' : '—'}</Td>
+                  <TdActions>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <button type="button" className="btn btn-secondary btn-sm actions-btn">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="h-8 w-8 p-0"
+                          aria-label={`إجراءات ${user.fullName}`}
+                          title="إجراءات"
+                        >
                           <MoreHorizontal />
-                          إجراءات
-                        </button>
+                        </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="actions-dropdown">
+                      <DropdownMenuContent align="end" className="min-w-60">
                         <DropdownMenuLabel>
                           {user.fullName} • {user.employeeCode}
                         </DropdownMenuLabel>
@@ -451,172 +478,172 @@ function EmployeesPage({
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
-                  </td>
-                </tr>
+                  </TdActions>
+                </Tr>
               ))
             )}
           </tbody>
-        </table>
-      </div>
+        </Table>
+      </TableSection>
 
-      <div className="employees-pagination">
-        <span className="pagination-info">{pageLabel}</span>
-        <div className="pagination-btns">
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            disabled={page <= 1 || loading}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-          >
-            السابق
-          </button>
-          <span className="pagination-page">
-            صفحة {page} / {totalPages}
-          </span>
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            disabled={page >= totalPages || loading}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            التالي
-          </button>
-        </div>
-      </div>
-
-      <Dialog open={modal?.type === 'confirm'} onOpenChange={(open) => !open && closeModal()}>
-        {modal?.type === 'confirm' && (
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>
-                {modal.action === 'delete' && 'تأكيد الحذف'}
-                {modal.action === 'toggle' && (modal.user.isActive ? 'تأكيد الإيقاف' : 'تأكيد التفعيل')}
-                {modal.action === 'reset-password' && 'تأكيد إعادة تعيين كلمة المرور'}
-                {modal.action === 'reset-device' && 'تأكيد إعادة تعيين الجهاز'}
-              </DialogTitle>
-              <DialogDescription>
-                {modal.action === 'delete' &&
-                  `هل أنت متأكد من حذف ${modal.user.fullName}؟ لا يمكن التراجع عن هذا الإجراء.`}
-                {modal.action === 'toggle' &&
-                  (modal.user.isActive
-                    ? `سيتم إيقاف حساب ${modal.user.fullName} ولن يتمكن من تسجيل الدخول.`
-                    : `سيتم تفعيل حساب ${modal.user.fullName}.`)}
-                {modal.action === 'reset-password' &&
-                  `سيتم إعادة كلمة مرور ${modal.user.fullName} إلى القيمة الافتراضية.`}
-                {modal.action === 'reset-device' &&
-                  `سيتم فك ربط الجهاز الحالي لـ ${modal.user.fullName} ليتمكن من الدخول من جهاز جديد.`}
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <button type="button" className="btn btn-secondary" disabled={busy} onClick={closeModal}>
-                إلغاء
-              </button>
-              <button
-                type="button"
-                className={`btn ${modal.action === 'delete' ? 'btn-danger' : 'btn-primary'}`}
-                disabled={busy}
-                onClick={() => void runConfirm(modal.action, modal.user)}
-              >
-                {busy ? <Loader2 className="spin" /> : null}
-                تأكيد
-              </button>
-            </DialogFooter>
-          </DialogContent>
-        )}
+      <Dialog open={confirmDialog.open} onOpenChange={(open) => !open && closeModal()}>
+        <DialogContent>
+          {confirmDialog.data ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>
+                  {confirmDialog.data.action === 'delete' && 'تأكيد الحذف'}
+                  {confirmDialog.data.action === 'toggle' &&
+                    (confirmDialog.data.user.isActive ? 'تأكيد الإيقاف' : 'تأكيد التفعيل')}
+                  {confirmDialog.data.action === 'reset-password' && 'تأكيد إعادة تعيين كلمة المرور'}
+                  {confirmDialog.data.action === 'reset-device' && 'تأكيد إعادة تعيين الجهاز'}
+                </DialogTitle>
+                <DialogDescription>
+                  {confirmDialog.data.action === 'delete' &&
+                    `هل أنت متأكد من حذف ${confirmDialog.data.user.fullName}؟ لا يمكن التراجع عن هذا الإجراء.`}
+                  {confirmDialog.data.action === 'toggle' &&
+                    (confirmDialog.data.user.isActive
+                      ? `سيتم إيقاف حساب ${confirmDialog.data.user.fullName} ولن يتمكن من تسجيل الدخول.`
+                      : `سيتم تفعيل حساب ${confirmDialog.data.user.fullName}.`)}
+                  {confirmDialog.data.action === 'reset-password' &&
+                    `سيتم إعادة كلمة مرور ${confirmDialog.data.user.fullName} إلى القيمة الافتراضية.`}
+                  {confirmDialog.data.action === 'reset-device' &&
+                    `سيتم فك ربط الجهاز الحالي لـ ${confirmDialog.data.user.fullName} ليتمكن من الدخول من جهاز جديد.`}
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button type="button" disabled={busy} onClick={closeModal} variant="secondary">
+                  إلغاء
+                </Button>
+                <Button
+                  type="button"
+                  variant={confirmDialog.data.action === 'delete' ? 'danger' : 'primary'}
+                  disabled={busy}
+                  onClick={() => {
+                    const data = confirmDialog.data
+                    if (!data) return
+                    void runConfirm(data.action, data.user)
+                  }}
+                >
+                  {busy ? <Loader2 className="animate-spin" /> : null}
+                  تأكيد
+                </Button>
+              </DialogFooter>
+            </>
+          ) : null}
+        </DialogContent>
       </Dialog>
 
-      <Dialog open={modal?.type === 'create'} onOpenChange={(open) => !open && closeModal()}>
-        {modal?.type === 'create' && (
-          <EmployeeFormDialog
-            mode="create"
-            departments={departments}
-            offices={offices}
-            busy={busy}
-            onClose={closeModal}
-            onSubmit={async (payload) => {
-              setBusy(true)
-              const toastId = notify.loading('جارٍ إضافة الموظف...')
-              try {
-                await registerUser(token, payload)
-                notify.dismiss(toastId)
-                notify.success(
-                  'تم إضافة الموظف بنجاح',
-                  'يمكن للموظف تسجيل الدخول باستخدام كوده وكلمة المرور.',
-                )
-                setModal(null)
-                setPage(1)
-                await invalidateUsers()
-              } catch (err) {
-                notify.dismiss(toastId)
-                handleApiError(err, 'تعذر إضافة الموظف')
-              } finally {
-                setBusy(false)
-              }
-            }}
-          />
-        )}
+      <Dialog open={createDialog.open} onOpenChange={(open) => !open && closeModal()}>
+        <DialogContent size="md">
+          {createDialog.data ? (
+            <EmployeeFormDialog
+              mode="create"
+              departments={departments}
+              offices={offices}
+              busy={busy}
+              onClose={closeModal}
+              onSubmit={async (payload) => {
+                setBusy(true)
+                const toastId = notify.loading('جارٍ إضافة الموظف...')
+                try {
+                  await registerUser(token, payload)
+                  notify.dismiss(toastId)
+                  notify.success(
+                    'تم إضافة الموظف بنجاح',
+                    'يمكن للموظف تسجيل الدخول باستخدام كوده وكلمة المرور.',
+                  )
+                  setModal(null)
+                  setPage(1)
+                  await invalidateUsers()
+                } catch (err) {
+                  notify.dismiss(toastId)
+                  handleApiError(err, 'تعذر إضافة الموظف')
+                } finally {
+                  setBusy(false)
+                }
+              }}
+            />
+          ) : null}
+        </DialogContent>
       </Dialog>
 
-      <Dialog open={modal?.type === 'update'} onOpenChange={(open) => !open && closeModal()}>
-        {modal?.type === 'update' && (
-          <EmployeeFormDialog
-            key={`update-${modal.user.id}-${modal.draft ? 'draft' : 'initial'}`}
-            mode="update"
-            user={modal.user}
-            draft={modal.draft}
-            departments={departments}
-            offices={offices}
-            busy={busy}
-            onClose={closeModal}
-            onRequestConfirm={(update) =>
-              setModal({ type: 'confirm-update', user: modal.user, update })
-            }
-          />
-        )}
+      <Dialog open={updateDialog.open} onOpenChange={(open) => !open && closeModal()}>
+        <DialogContent size="md">
+          {updateDialog.data ? (
+            <EmployeeFormDialog
+              key={`update-${updateDialog.data.user.id}-${updateDialog.data.draft ? 'draft' : 'initial'}`}
+              mode="update"
+              user={updateDialog.data.user}
+              draft={updateDialog.data.draft}
+              departments={departments}
+              offices={offices}
+              busy={busy}
+              onClose={closeModal}
+              onRequestConfirm={(update) => {
+                const data = updateDialog.data
+                if (!data) return
+                setModal({ type: 'confirm-update', user: data.user, update })
+              }}
+            />
+          ) : null}
+        </DialogContent>
       </Dialog>
 
       <Dialog
-        open={modal?.type === 'confirm-update'}
+        open={confirmUpdateDialog.open}
         onOpenChange={(open) => {
-          if (!open && !busy && modal?.type === 'confirm-update') {
-            setModal({ type: 'update', user: modal.user, draft: modal.update })
+          if (!open && !busy && confirmUpdateDialog.data) {
+            setModal({
+              type: 'update',
+              user: confirmUpdateDialog.data.user,
+              draft: confirmUpdateDialog.data.update,
+            })
           }
         }}
       >
-        {modal?.type === 'confirm-update' && (
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>تأكيد حفظ التغييرات</DialogTitle>
-              <DialogDescription>
-                هل تريد حفظ التعديلات على بيانات {modal.user.fullName}؟ سيتم تطبيق التغييرات
-                فوراً.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={busy}
-                onClick={() =>
-                  setModal({ type: 'update', user: modal.user, draft: modal.update })
-                }
-              >
-                إلغاء
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={busy}
-                onClick={() => void runUpdateSave(modal.user, modal.update)}
-              >
-                {busy ? <Loader2 className="spin" /> : <Pencil />}
-                تأكيد الحفظ
-              </button>
-            </DialogFooter>
-          </DialogContent>
-        )}
+        <DialogContent nested>
+          {confirmUpdateDialog.data ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>تأكيد حفظ التغييرات</DialogTitle>
+                <DialogDescription>
+                  هل تريد حفظ التعديلات على بيانات {confirmUpdateDialog.data.user.fullName}؟ سيتم
+                  تطبيق التغييرات فوراً.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    const data = confirmUpdateDialog.data
+                    if (!data) return
+                    setModal({ type: 'update', user: data.user, draft: data.update })
+                  }}
+                  variant="secondary"
+                >
+                  إلغاء
+                </Button>
+                <Button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    const data = confirmUpdateDialog.data
+                    if (!data) return
+                    void runUpdateSave(data.user, data.update)
+                  }}
+                  variant="primary"
+                >
+                  {busy ? <Loader2 className="animate-spin" /> : <Pencil />}
+                  تأكيد الحفظ
+                </Button>
+              </DialogFooter>
+            </>
+          ) : null}
+        </DialogContent>
       </Dialog>
-    </div>
+    </PageShell>
   )
 }
 
@@ -655,6 +682,9 @@ function EmployeeFormDialog({
   )
   const [password, setPassword] = useState('4444')
   const [role, setRole] = useState<Role>(user?.role ?? 'EMPLOYEE')
+  const [bio, setBio] = useState(
+    (draft?.bio ?? user?.bio ?? '') as string,
+  )
   const [points, setPoints] = useState(String(draft?.points ?? user?.points ?? 0))
   const [isActive, setIsActive] = useState(draft?.isActive ?? user?.isActive ?? true)
   const [departmentId, setDepartmentId] = useState(
@@ -690,6 +720,7 @@ function EmployeeFormDialog({
         email,
         departmentId: resolvedDepartmentId,
         officeId: resolvedOfficeId,
+        bio,
       })
       if (!parsed.success) {
         const msg = zodErrorMessage(parsed.error)
@@ -709,6 +740,7 @@ function EmployeeFormDialog({
       departmentId: resolvedDepartmentId,
       officeId: resolvedOfficeId,
       isActive,
+      bio,
     })
     if (!parsed.success) {
       const msg = zodErrorMessage(parsed.error)
@@ -720,7 +752,7 @@ function EmployeeFormDialog({
   }
 
   return (
-    <DialogContent>
+    <>
       <form onSubmit={(e) => void handleSubmit(e)}>
         <DialogHeader>
           <DialogTitle>{mode === 'create' ? 'إضافة موظف جديد' : 'تحديث بيانات الموظف'}</DialogTitle>
@@ -731,27 +763,27 @@ function EmployeeFormDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="employee-form">
+        <DialogBody className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
           {mode === 'create' && (
-            <label className="form-field">
+            <label className="flex flex-col gap-1.5 text-[13px] text-muted">
               <span>الاسم الكامل *</span>
-              <input value={fullName} onChange={(e) => setFullName(e.target.value)} />
+              <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
             </label>
           )}
 
-          <label className="form-field">
+          <label className="flex flex-col gap-1.5 text-[13px] text-muted">
             <span>كود الموظف *</span>
-            <input value={employeeCode} onChange={(e) => setEmployeeCode(e.target.value)} />
+            <Input value={employeeCode} onChange={(e) => setEmployeeCode(e.target.value)} />
           </label>
 
-          <label className="form-field">
+          <label className="flex flex-col gap-1.5 text-[13px] text-muted">
             <span>رقم الهاتف *</span>
-            <input value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} />
+            <Input value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} />
           </label>
 
-          <label className="form-field">
+          <label className="flex flex-col gap-1.5 text-[13px] text-muted">
             <span>البريد الإلكتروني</span>
-            <input
+            <Input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -761,18 +793,18 @@ function EmployeeFormDialog({
 
           {mode === 'create' && (
             <>
-              <label className="form-field">
+              <label className="flex flex-col gap-1.5 text-[13px] text-muted">
                 <span>كلمة المرور *</span>
-                <input
+                <Input
                   type="text"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
               </label>
-              <div className="form-field">
+              <div className="flex flex-col gap-1.5 text-[13px] text-muted">
                 <span>الدور *</span>
                 <Select value={role} onValueChange={(value) => setRole(value as Role)}>
-                  <SelectTrigger aria-label="الدور">
+                  <SelectTrigger className="w-full" aria-label="الدور">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -787,16 +819,16 @@ function EmployeeFormDialog({
 
           {mode === 'update' && (
             <>
-              <label className="form-field">
+              <label className="flex flex-col gap-1.5 text-[13px] text-muted">
                 <span>النقاط</span>
-                <input
+                <Input
                   type="number"
                   min={0}
                   value={points}
                   onChange={(e) => setPoints(e.target.value)}
                 />
               </label>
-              <label className="form-field form-field-check">
+              <label className="flex flex-row items-center gap-2.5 pt-7 text-[13px] text-muted">
                 <Checkbox
                   checked={isActive}
                   onCheckedChange={(checked) => setIsActive(checked === true)}
@@ -807,10 +839,10 @@ function EmployeeFormDialog({
             </>
           )}
 
-          <div className="form-field">
+          <div className="flex flex-col gap-1.5 text-[13px] text-muted">
             <span>الإدارة</span>
             <Select value={departmentId} onValueChange={setDepartmentId}>
-              <SelectTrigger aria-label="الإدارة">
+              <SelectTrigger className="w-full" aria-label="الإدارة">
                 <SelectValue placeholder="بدون إدارة" />
               </SelectTrigger>
               <SelectContent>
@@ -824,10 +856,10 @@ function EmployeeFormDialog({
             </Select>
           </div>
 
-          <div className="form-field">
+          <div className="flex flex-col gap-1.5 text-[13px] text-muted">
             <span>المكتب</span>
             <Select value={officeId} onValueChange={setOfficeId}>
-              <SelectTrigger aria-label="المكتب">
+              <SelectTrigger className="w-full" aria-label="المكتب">
                 <SelectValue placeholder="بدون مكتب" />
               </SelectTrigger>
               <SelectContent>
@@ -841,20 +873,32 @@ function EmployeeFormDialog({
             </Select>
           </div>
 
-          {formError && <p className="form-error">{formError}</p>}
+          <label className="col-span-full flex flex-col gap-1.5 text-[13px] text-muted">
+            <span>النبذة</span>
+            <textarea
+              value={bio}
+              onChange={(e) => setBio(e.target.value)}
+              placeholder="اختياري"
+              rows={3}
+              maxLength={500}
+              className="min-h-[84px] w-full resize-y rounded-[10px] border border-border bg-white px-3 py-2.5 text-sm text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-neutral-400 focus:border-neutral-900 focus:shadow-[0_0_0_2px_rgba(17,17,17,0.12)] disabled:cursor-not-allowed disabled:opacity-55"
+            />
+          </label>
+
+          {formError && <p className="col-span-full m-0 text-[13px] font-semibold text-red-700">{formError}</p>}
         </DialogBody>
 
         <DialogFooter>
-          <button type="button" className="btn btn-secondary" disabled={busy} onClick={onClose}>
+          <Button type="button" disabled={busy} onClick={onClose} variant="secondary">
             إلغاء
-          </button>
-          <button type="submit" className="btn btn-primary" disabled={busy}>
-            {busy ? <Loader2 className="spin" /> : mode === 'create' ? <UserPlus /> : <Pencil />}
+          </Button>
+          <Button type="submit" disabled={busy} variant="primary">
+            {busy ? <Loader2 className="animate-spin" /> : mode === 'create' ? <UserPlus /> : <Pencil />}
             {mode === 'create' ? 'إضافة' : 'حفظ'}
-          </button>
+          </Button>
         </DialogFooter>
       </form>
-    </DialogContent>
+    </>
   )
 }
 

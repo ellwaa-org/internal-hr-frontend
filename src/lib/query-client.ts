@@ -1,13 +1,19 @@
 import { QueryClient } from '@tanstack/react-query'
 
-/** 30 minutes — shared cache/stale window for list data */
-export const QUERY_STALE_TIME = 1000 * 60 * 30
+/** Frequent pages: الموظفون، الحضور والانصراف، المهام الخارجية */
+export const QUERY_STALE_TIME_FREQUENT = 1000 * 60 * 5
+
+/** Other pages: الإدارات، المكاتب، … */
+export const QUERY_STALE_TIME_DEFAULT = 1000 * 60 * 30
+
+/** @deprecated Prefer QUERY_STALE_TIME_DEFAULT or QUERY_STALE_TIME_FREQUENT */
+export const QUERY_STALE_TIME = QUERY_STALE_TIME_DEFAULT
 
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: QUERY_STALE_TIME,
-      gcTime: QUERY_STALE_TIME * 2,
+      staleTime: QUERY_STALE_TIME_DEFAULT,
+      gcTime: QUERY_STALE_TIME_DEFAULT * 2,
       refetchOnWindowFocus: false,
       retry: 1,
     },
@@ -24,6 +30,8 @@ export const queryKeys = {
       role: string
       status: string
     }) => [...queryKeys.users.all, 'list', params] as const,
+    directory: (params?: { limit?: number; role?: string; search?: string }) =>
+      [...queryKeys.users.all, 'directory', params ?? {}] as const,
   },
   departments: {
     all: ['departments'] as const,
@@ -55,7 +63,26 @@ export const queryKeys = {
       to: string
       dayStatus: string
       officeId: string
+      type?: string
+      userId?: string
     }) => [...queryKeys.attendance.all, 'list', params] as const,
+    users: (params: {
+      page: number
+      limit: number
+      today: boolean
+      from: string
+      to: string
+      status: string
+      officeId: string
+      departmentId: string
+      type?: string
+      search?: string
+    }) => [...queryKeys.attendance.all, 'users', params] as const,
+    detail: (id: string) => [...queryKeys.attendance.all, 'detail', id] as const,
+    user: (
+      userId: number,
+      params: { page: number; limit: number; from: string; to: string; type?: string },
+    ) => [...queryKeys.attendance.all, 'user', userId, params] as const,
   },
   profile: {
     me: ['profile', 'me'] as const,

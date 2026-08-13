@@ -11,12 +11,16 @@ export function Toaster() {
       gap={10}
       toastOptions={{
         classNames: {
-          toast: 'hr-toast',
-          title: 'hr-toast-title',
-          description: 'hr-toast-description',
-          success: 'hr-toast-success',
-          error: 'hr-toast-error',
-          info: 'hr-toast-info',
+          toast:
+            'items-start gap-2.5 rounded-[14px] border border-border bg-white px-4 py-3.5 font-sans text-foreground shadow-[0_12px_40px_rgba(0,0,0,0.1)]',
+          title: 'text-sm font-bold leading-snug',
+          description: 'text-[13px] leading-snug opacity-90',
+          success: 'border-emerald-200 bg-success-soft text-success',
+          error: 'border-red-200 bg-danger-soft text-red-700',
+          info: 'border-slate-200 bg-slate-50 text-slate-700',
+          loading: 'border-border bg-white text-foreground',
+          closeButton: 'rounded-lg border-black/10 bg-white/80',
+          icon: 'mt-0.5',
         },
       }}
     />

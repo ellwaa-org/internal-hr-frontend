@@ -1,22 +1,24 @@
 import { useEffect, useState } from 'react'
 import {
   Building2,
+  Briefcase,
   CalendarCheck,
   ChevronUp,
-  ClipboardList,
   LogOut,
   MapPin,
   Settings,
   Users,
 } from 'lucide-react'
-import { clearToken, getProfile, type Profile, type Role } from './lib/api'
-import { isUnauthorizedError } from './lib/errors'
-import { notify } from './lib/toast'
-import AttendancePage from './Attendance'
-import DepartmentsPage from './Departments'
-import EmployeesPage from './Employees'
-import OfficesPage from './Offices'
-import { Avatar, AvatarFallback, AvatarImage } from './components/ui/avatar'
+import { clearToken, getProfile, type Profile, type Role } from '@/lib/api'
+import { isUnauthorizedError } from '@/lib/errors'
+import { notify } from '@/lib/toast'
+import AttendancePage from '@/features/attendance/AttendancePage'
+import DepartmentsPage from '@/features/departments/DepartmentsPage'
+import EmployeesPage from '@/features/employees/EmployeesPage'
+import OfficesPage from '@/features/offices/OfficesPage'
+import SettingsPage from '@/features/settings/SettingsPage'
+import TasksPage from '@/features/tasks/TasksPage'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,7 +26,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from './components/ui/dropdown-menu'
+} from '@/components/ui/dropdown-menu'
 import {
   Sidebar,
   SidebarClose,
@@ -33,17 +35,18 @@ import {
   SidebarGroup,
   SidebarGroupLabel,
   SidebarHeader,
+  SidebarLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
   SidebarSeparator,
   SidebarTrigger,
-} from './components/ui/sidebar'
-import { useSidebar } from './components/ui/sidebar-context'
-import { Tooltip, TooltipContent, TooltipTrigger } from './components/ui/tooltip'
-import logo from './assets/logo.webp'
-import './Home.css'
+} from '@/components/ui/sidebar'
+import { useSidebar } from '@/components/ui/sidebar-context'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { cn } from '@/lib/utils'
+import logo from '@/assets/logo.webp'
 
 const ROLE_LABELS: Record<Role, string> = {
   ADMIN: 'مدير النظام',
@@ -51,14 +54,14 @@ const ROLE_LABELS: Record<Role, string> = {
   EMPLOYEE: 'موظف',
 }
 
-type NavPage = 'employees' | 'departments' | 'offices' | 'attendance' | 'reports' | 'settings'
+type NavPage = 'employees' | 'departments' | 'offices' | 'attendance' | 'tasks' | 'settings'
 
 const NAV_TITLES: Record<NavPage, string> = {
   employees: 'الموظفون',
   departments: 'الإدارات',
   offices: 'المكاتب',
   attendance: 'الحضور والانصراف',
-  reports: 'التقارير',
+  tasks: 'المهام الخارجية',
   settings: 'الإعدادات',
 }
 
@@ -70,10 +73,6 @@ function initialsOf(name: string): string {
     .map((part) => part.charAt(0))
     .join('')
     .toUpperCase()
-}
-
-function isUnauthorized(err: unknown): boolean {
-  return isUnauthorizedError(err)
 }
 
 function UserFooter({
@@ -89,16 +88,26 @@ function UserFooter({
 
   const trigger = (
     <DropdownMenuTrigger asChild>
-      <button type="button" className="sidebar-user">
+      <button
+        type="button"
+        className={cn(
+          'flex w-full cursor-pointer items-center gap-2.5 rounded-[10px] border-none bg-transparent p-2 text-start text-inherit transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent',
+          collapsed && 'justify-center',
+        )}
+      >
         <Avatar>
           <AvatarImage src="" alt={name} />
           <AvatarFallback>{initialsOf(name)}</AvatarFallback>
         </Avatar>
-        <span className="sidebar-user-info">
-          <span className="sidebar-user-name">{name}</span>
-          <span className="sidebar-user-role">{role}</span>
-        </span>
-        <ChevronUp className="sidebar-footer-chevron" />
+        {!collapsed && (
+          <>
+            <span className="flex min-w-0 flex-col">
+              <span className="truncate text-sm font-semibold text-foreground">{name}</span>
+              <span className="truncate text-xs text-muted">{role}</span>
+            </span>
+            <ChevronUp className="ms-auto h-4 w-4 shrink-0 text-muted" />
+          </>
+        )}
       </button>
     </DropdownMenuTrigger>
   )
@@ -113,14 +122,14 @@ function UserFooter({
       ) : (
         trigger
       )}
-      <DropdownMenuContent>
+      <DropdownMenuContent side="top" align="end" className="min-w-[220px]">
         <DropdownMenuLabel>الملف الشخصي</DropdownMenuLabel>
-        <div className="dropdown-profile">
-          <span className="dropdown-profile-name">{name}</span>
-          {role && <span className="dropdown-profile-role">{role}</span>}
-          {profile && <span className="dropdown-profile-code">كود الموظف: {profile.employeeCode}</span>}
+        <div className="flex flex-col gap-0.5 px-2.5 pt-1 pb-2.5">
+          <span className="text-sm font-semibold text-foreground">{name}</span>
+          {role && <span className="text-xs text-muted">{role}</span>}
+          {profile && <span className="text-xs text-muted">كود الموظف: {profile.employeeCode}</span>}
           {profile && profile.points > 0 && (
-            <span className="dropdown-profile-points">النقاط: {profile.points}</span>
+            <span className="text-xs text-muted">النقاط: {profile.points}</span>
           )}
         </div>
         <DropdownMenuSeparator />
@@ -133,27 +142,20 @@ function UserFooter({
   )
 }
 
-function PlaceholderPage({ title }: { title: string }) {
-  return (
-    <div className="page-card">
-      <h1 className="welcome-title">{title}</h1>
-      <p className="welcome-subtitle">هذه الصفحة قيد التطوير وستكون متاحة قريباً.</p>
-    </div>
-  )
-}
-
 function HomeShell({
   token,
   profile,
   page,
   onNavigate,
   onSignOut,
+  onProfileUpdated,
 }: {
   token: string
-  profile: Profile | null
+  profile: Profile
   page: NavPage
   onNavigate: (page: NavPage) => void
   onSignOut: () => void
+  onProfileUpdated: (profile: Profile) => void
 }) {
   const { setOpenMobile } = useSidebar()
 
@@ -166,9 +168,15 @@ function HomeShell({
     <>
       <Sidebar>
         <SidebarHeader>
-          <img src={logo} className="sidebar-logo" alt="شعار اللواء للخدمات القانونية" />
-          <span className="sidebar-brand">اللواء للخدمات القانونية</span>
-          <SidebarClose className="sidebar-header-close" />
+          <img
+            src={logo}
+            className="h-[34px] w-[34px] shrink-0 object-contain"
+            alt="شعار اللواء للخدمات القانونية"
+          />
+          <SidebarLabel className="text-[15px] font-bold text-foreground">
+            اللواء للخدمات القانونية
+          </SidebarLabel>
+          <SidebarClose />
         </SidebarHeader>
 
         <SidebarContent>
@@ -182,7 +190,7 @@ function HomeShell({
                   onClick={() => goTo('employees')}
                 >
                   <Users />
-                  <span className="sidebar-menu-label">الموظفون</span>
+                  <SidebarLabel>الموظفون</SidebarLabel>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
@@ -192,7 +200,7 @@ function HomeShell({
                   onClick={() => goTo('departments')}
                 >
                   <Building2 />
-                  <span className="sidebar-menu-label">الإدارات</span>
+                  <SidebarLabel>الإدارات</SidebarLabel>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
@@ -202,7 +210,7 @@ function HomeShell({
                   onClick={() => goTo('offices')}
                 >
                   <MapPin />
-                  <span className="sidebar-menu-label">المكاتب</span>
+                  <SidebarLabel>المكاتب</SidebarLabel>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarGroup>
@@ -216,17 +224,17 @@ function HomeShell({
                   onClick={() => goTo('attendance')}
                 >
                   <CalendarCheck />
-                  <span className="sidebar-menu-label">الحضور والانصراف</span>
+                  <SidebarLabel>الحضور والانصراف</SidebarLabel>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton
-                  isActive={page === 'reports'}
-                  tooltip="التقارير"
-                  onClick={() => goTo('reports')}
+                  isActive={page === 'tasks'}
+                  tooltip="المهام الخارجية"
+                  onClick={() => goTo('tasks')}
                 >
-                  <ClipboardList />
-                  <span className="sidebar-menu-label">التقارير</span>
+                  <Briefcase />
+                  <SidebarLabel>المهام الخارجية</SidebarLabel>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
@@ -236,7 +244,7 @@ function HomeShell({
                   onClick={() => goTo('settings')}
                 >
                   <Settings />
-                  <span className="sidebar-menu-label">الإعدادات</span>
+                  <SidebarLabel>الإعدادات</SidebarLabel>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarGroup>
@@ -249,12 +257,14 @@ function HomeShell({
         </SidebarFooter>
       </Sidebar>
 
-      <div className="sidebar-main">
-        <header className="topbar">
+      <div className="flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden">
+        <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center gap-3 border-b border-border bg-background px-5 max-md:gap-2 max-md:px-3">
           <SidebarTrigger />
-          <span className="topbar-title">{NAV_TITLES[page]}</span>
+          <span className="min-w-0 truncate text-base font-semibold text-foreground max-md:text-[15px]">
+            {NAV_TITLES[page]}
+          </span>
         </header>
-        <main className="page-content">
+        <main className="min-h-0 max-w-full flex-1 overflow-auto p-7 max-md:px-3 max-md:pt-3.5 max-md:pb-5">
           {page === 'employees' ? (
             <EmployeesPage token={token} onUnauthorized={onSignOut} />
           ) : page === 'departments' ? (
@@ -263,8 +273,15 @@ function HomeShell({
             <OfficesPage token={token} onUnauthorized={onSignOut} />
           ) : page === 'attendance' ? (
             <AttendancePage token={token} onUnauthorized={onSignOut} />
+          ) : page === 'tasks' ? (
+            <TasksPage token={token} onUnauthorized={onSignOut} />
           ) : (
-            <PlaceholderPage title={NAV_TITLES[page]} />
+            <SettingsPage
+              token={token}
+              profile={profile}
+              onUnauthorized={onSignOut}
+              onProfileUpdated={onProfileUpdated}
+            />
           )}
         </main>
       </div>
@@ -272,7 +289,7 @@ function HomeShell({
   )
 }
 
-function Home({ token, onSignOut }: { token: string; onSignOut: () => void }) {
+function HomePage({ token, onSignOut }: { token: string; onSignOut: () => void }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [page, setPage] = useState<NavPage>('employees')
   const [accessChecked, setAccessChecked] = useState(false)
@@ -293,7 +310,7 @@ function Home({ token, onSignOut }: { token: string; onSignOut: () => void }) {
       })
       .catch((err: unknown) => {
         if (cancelled) return
-        if (isUnauthorized(err)) {
+        if (isUnauthorizedError(err)) {
           notify.error(err, 'انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.')
           clearToken()
           onSignOut()
@@ -316,8 +333,8 @@ function Home({ token, onSignOut }: { token: string; onSignOut: () => void }) {
 
   if (!accessChecked || !profile) {
     return (
-      <div className="page-card" style={{ margin: 24, maxWidth: 480 }}>
-        <p className="welcome-subtitle">جارٍ التحقق من الصلاحيات...</p>
+      <div className="m-6 max-w-[480px] rounded-2xl border border-border bg-white p-7 shadow-card">
+        <p className="m-0 text-sm text-muted">جارٍ التحقق من الصلاحيات...</p>
       </div>
     )
   }
@@ -330,9 +347,10 @@ function Home({ token, onSignOut }: { token: string; onSignOut: () => void }) {
         page={page}
         onNavigate={setPage}
         onSignOut={handleSignOut}
+        onProfileUpdated={setProfile}
       />
     </SidebarProvider>
   )
 }
 
-export default Home
+export default HomePage

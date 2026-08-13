@@ -1,6 +1,6 @@
 import * as TooltipPrimitive from '@radix-ui/react-tooltip'
 import type { ComponentProps } from 'react'
-import { cn } from '../../lib/utils'
+import { cn } from '@/lib/utils'
 
 export function TooltipProvider(props: ComponentProps<typeof TooltipPrimitive.Provider>) {
   return <TooltipPrimitive.Provider {...props} />
@@ -23,7 +23,10 @@ export function TooltipContent({
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Content
         sideOffset={sideOffset}
-        className={cn('tooltip-content', className)}
+        className={cn(
+          'z-60 rounded-md bg-neutral-900 px-2.5 py-1.5 text-xs leading-snug text-white shadow-sm outline-none data-[state=delayed-open]:animate-dropdown-in data-[state=instant-open]:animate-dropdown-in',
+          className,
+        )}
         {...props}
       />
     </TooltipPrimitive.Portal>

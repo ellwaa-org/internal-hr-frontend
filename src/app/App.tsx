@@ -1,8 +1,7 @@
 import { useCallback, useState } from 'react'
-import Login from './Login'
-import Home from './Home'
-import { clearToken, getToken } from './lib/api'
-import './App.css'
+import LoginPage from '@/features/auth/LoginPage'
+import HomePage from '@/features/dashboard/HomePage'
+import { clearToken, getToken } from '@/lib/api'
 
 function App() {
   const [token, setToken] = useState<string | null>(() => getToken())
@@ -16,8 +15,8 @@ function App() {
     setToken(null)
   }, [])
 
-  if (!token) return <Login onLogin={handleLogin} />
-  return <Home token={token} onSignOut={handleSignOut} />
+  if (!token) return <LoginPage onLogin={handleLogin} />
+  return <HomePage token={token} onSignOut={handleSignOut} />
 }
 
 export default App

@@ -1,6 +1,6 @@
 import * as SeparatorPrimitive from '@radix-ui/react-separator'
 import type { ComponentProps } from 'react'
-import { cn } from '../../lib/utils'
+import { cn } from '@/lib/utils'
 
 export function Separator({
   className,
@@ -13,8 +13,8 @@ export function Separator({
       decorative={decorative}
       orientation={orientation}
       className={cn(
-        'separator',
-        orientation === 'vertical' ? 'separator-vertical' : 'separator-horizontal',
+        'bg-border',
+        orientation === 'vertical' ? 'h-full w-px' : 'h-px w-full',
         className,
       )}
       {...props}
