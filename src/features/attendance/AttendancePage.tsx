@@ -20,6 +20,7 @@ import { isUnauthorizedError } from '@/lib/errors'
 import { formatDate, formatTime12, startOfMonthIso, todayIsoDate } from '@/lib/datetime'
 import { queryKeys, QUERY_STALE_TIME_FREQUENT } from '@/lib/query-client'
 import { notify } from '@/lib/toast'
+import { usePageParam } from '@/lib/use-page-param'
 import { Button } from '@/components/ui/button'
 import { DayPicker } from '@/components/ui/day-picker'
 import { ExcelExportDialog } from '@/components/ui/excel-export-dialog'
@@ -237,7 +238,7 @@ function AttendancePage({
 }) {
   const queryClient = useQueryClient()
   const today = useMemo(() => todayIsoDate(), [])
-  const [page, setPage] = useState(1)
+  const [page, setPage] = usePageParam()
   const [limit] = useState(20)
   const [from, setFrom] = useState(today)
   const [to, setTo] = useState(today)
@@ -266,10 +267,6 @@ function AttendancePage({
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 250)
     return () => window.clearTimeout(timer)
   }, [search])
-
-  useEffect(() => {
-    setPage(1)
-  }, [debouncedSearch, from, to, status])
 
   const searching = Boolean(debouncedSearch)
   const needsClientStatusFilter = status === 'present'
@@ -489,7 +486,10 @@ function AttendancePage({
 
         <SearchField
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setPage(1)
+            setSearch(e.target.value)
+          }}
           placeholder="بحث باسم الموظف أو الكود..."
           aria-label="بحث باسم الموظف"
         />

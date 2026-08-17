@@ -39,6 +39,7 @@ import {
 } from '@/lib/schemas'
 import { notify } from '@/lib/toast'
 import { useDialogState } from '@/lib/use-dialog-state'
+import { usePageParam } from '@/lib/use-page-param'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -114,7 +115,7 @@ function EmployeesPage({
   onUnauthorized: () => void
 }) {
   const queryClient = useQueryClient()
-  const [page, setPage] = useState(1)
+  const [page, setPage] = usePageParam()
   const [limit] = useState(20)
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<'all' | Role>('all')

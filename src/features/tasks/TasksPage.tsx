@@ -22,6 +22,7 @@ import { formatDate, formatDateTime12, startOfMonthIso, todayIsoDate } from '@/l
 import { queryKeys, QUERY_STALE_TIME_FREQUENT } from '@/lib/query-client'
 import { notify } from '@/lib/toast'
 import { useDialogState } from '@/lib/use-dialog-state'
+import { usePageParam } from '@/lib/use-page-param'
 import { Button } from '@/components/ui/button'
 import { DayPicker } from '@/components/ui/day-picker'
 import { ExcelExportDialog } from '@/components/ui/excel-export-dialog'
@@ -188,7 +189,7 @@ function TasksPage({
   token: string
   onUnauthorized: () => void
 }) {
-  const [page, setPage] = useState(1)
+  const [page, setPage] = usePageParam()
   const [limit] = useState(20)
   const today = useMemo(() => todayIsoDate(), [])
   const [from, setFrom] = useState(today)
@@ -218,10 +219,6 @@ function TasksPage({
     const timer = window.setTimeout(() => setDebouncedUserSearch(userSearch.trim()), 250)
     return () => window.clearTimeout(timer)
   }, [userSearch])
-
-  useEffect(() => {
-    setPage(1)
-  }, [from, to, dayStatus, officeId, debouncedUserSearch])
 
   const listParams = useMemo(
     () => ({
@@ -432,7 +429,10 @@ function TasksPage({
 
         <SearchField
           value={userSearch}
-          onChange={(e) => setUserSearch(e.target.value)}
+          onChange={(e) => {
+            setPage(1)
+            setUserSearch(e.target.value)
+          }}
           placeholder="بحث عن موظف للتصفية..."
           aria-label="بحث عن موظف"
           className="flex-[1_1_220px]"

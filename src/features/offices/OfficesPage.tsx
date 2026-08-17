@@ -29,6 +29,7 @@ import { createOfficeSchema, updateOfficeSchema, zodErrorMessage } from '@/lib/s
 import { notify } from '@/lib/toast'
 import { formatTime12 } from '@/lib/datetime'
 import { useDialogState } from '@/lib/use-dialog-state'
+import { usePageParam } from '@/lib/use-page-param'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -161,7 +162,7 @@ function OfficesPage({
   onUnauthorized: () => void
 }) {
   const queryClient = useQueryClient()
-  const [page, setPage] = useState(1)
+  const [page, setPage] = usePageParam()
   const [limit] = useState(20)
   const [search, setSearch] = useState('')
   const [rewardsFilter, setRewardsFilter] = useState<'all' | 'yes' | 'no'>('all')

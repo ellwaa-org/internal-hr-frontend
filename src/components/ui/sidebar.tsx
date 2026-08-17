@@ -1,8 +1,10 @@
 import {
   useState,
   type ComponentProps,
+  type MouseEventHandler,
   type ReactNode,
 } from 'react'
+import { Slot } from '@radix-ui/react-slot'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import * as SeparatorPrimitive from '@radix-ui/react-separator'
 import { Menu, PanelLeft, X } from 'lucide-react'
@@ -140,26 +142,29 @@ export function SidebarMenuButton({
   isActive = false,
   tooltip,
   onClick,
+  asChild = false,
 }: {
   children: ReactNode
   className?: string
   isActive?: boolean
   tooltip?: string
-  onClick?: () => void
+  onClick?: MouseEventHandler<HTMLElement>
+  asChild?: boolean
 }) {
   const { collapsed } = useSidebar()
+  const Comp = asChild ? Slot : 'button'
   const button = (
-    <button
-      type="button"
+    <Comp
+      {...(!asChild ? { type: 'button' as const } : {})}
       data-active={isActive}
       className={cn(
-        'flex w-full cursor-pointer items-center gap-2.5 rounded-lg border-none bg-transparent px-3 py-2.5 text-start text-sm font-medium text-foreground transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent data-[active=true]:bg-accent data-[active=true]:text-accent-foreground group-data-[collapsed=true]:justify-center group-data-[collapsed=true]:px-2.5 [&_svg]:h-[18px] [&_svg]:w-[18px] [&_svg]:shrink-0',
+        'flex w-full cursor-pointer items-center gap-2.5 rounded-lg border-none bg-transparent px-3 py-2.5 text-start text-sm font-medium text-inherit text-foreground no-underline transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent data-[active=true]:bg-accent data-[active=true]:text-accent-foreground group-data-[collapsed=true]:justify-center group-data-[collapsed=true]:px-2.5 [&_svg]:h-[18px] [&_svg]:w-[18px] [&_svg]:shrink-0',
         className,
       )}
       onClick={onClick}
     >
       {children}
-    </button>
+    </Comp>
   )
 
   if (collapsed && tooltip) {

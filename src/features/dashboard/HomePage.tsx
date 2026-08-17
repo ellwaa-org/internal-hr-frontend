@@ -9,8 +9,10 @@ import {
   Settings,
   Users,
 } from 'lucide-react'
+import { Navigate, NavLink, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { clearToken, getProfile, type Profile, type Role } from '@/lib/api'
 import { isUnauthorizedError } from '@/lib/errors'
+import { NAV_PATHS, NAV_TITLES, navPageFromPath } from '@/lib/nav'
 import { notify } from '@/lib/toast'
 import AttendancePage from '@/features/attendance/AttendancePage'
 import DepartmentsPage from '@/features/departments/DepartmentsPage'
@@ -52,17 +54,6 @@ const ROLE_LABELS: Record<Role, string> = {
   ADMIN: 'مدير النظام',
   HR: 'موارد بشرية',
   EMPLOYEE: 'موظف',
-}
-
-type NavPage = 'employees' | 'departments' | 'offices' | 'attendance' | 'tasks' | 'settings'
-
-const NAV_TITLES: Record<NavPage, string> = {
-  employees: 'الموظفون',
-  departments: 'الإدارات',
-  offices: 'المكاتب',
-  attendance: 'الحضور والانصراف',
-  tasks: 'المهام الخارجية',
-  settings: 'الإعدادات',
 }
 
 function initialsOf(name: string): string {
@@ -143,26 +134,16 @@ function UserFooter({
 }
 
 function HomeShell({
-  token,
   profile,
-  page,
-  onNavigate,
   onSignOut,
-  onProfileUpdated,
 }: {
-  token: string
   profile: Profile
-  page: NavPage
-  onNavigate: (page: NavPage) => void
   onSignOut: () => void
-  onProfileUpdated: (profile: Profile) => void
 }) {
   const { setOpenMobile } = useSidebar()
-
-  const goTo = (next: NavPage) => {
-    onNavigate(next)
-    setOpenMobile(false)
-  }
+  const location = useLocation()
+  const page = navPageFromPath(location.pathname) ?? 'employees'
+  const closeMobile = () => setOpenMobile(false)
 
   return (
     <>
@@ -184,33 +165,27 @@ function HomeShell({
             <SidebarGroup>
               <SidebarGroupLabel>الرئيسية</SidebarGroupLabel>
               <SidebarMenuItem>
-                <SidebarMenuButton
-                  isActive={page === 'employees'}
-                  tooltip="الموظفون"
-                  onClick={() => goTo('employees')}
-                >
-                  <Users />
-                  <SidebarLabel>الموظفون</SidebarLabel>
+                <SidebarMenuButton asChild isActive={page === 'employees'} tooltip="الموظفون" onClick={closeMobile}>
+                  <NavLink to={NAV_PATHS.employees}>
+                    <Users />
+                    <SidebarLabel>الموظفون</SidebarLabel>
+                  </NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton
-                  isActive={page === 'departments'}
-                  tooltip="الإدارات"
-                  onClick={() => goTo('departments')}
-                >
-                  <Building2 />
-                  <SidebarLabel>الإدارات</SidebarLabel>
+                <SidebarMenuButton asChild isActive={page === 'departments'} tooltip="الإدارات" onClick={closeMobile}>
+                  <NavLink to={NAV_PATHS.departments}>
+                    <Building2 />
+                    <SidebarLabel>الإدارات</SidebarLabel>
+                  </NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton
-                  isActive={page === 'offices'}
-                  tooltip="المكاتب"
-                  onClick={() => goTo('offices')}
-                >
-                  <MapPin />
-                  <SidebarLabel>المكاتب</SidebarLabel>
+                <SidebarMenuButton asChild isActive={page === 'offices'} tooltip="المكاتب" onClick={closeMobile}>
+                  <NavLink to={NAV_PATHS.offices}>
+                    <MapPin />
+                    <SidebarLabel>المكاتب</SidebarLabel>
+                  </NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarGroup>
@@ -218,33 +193,27 @@ function HomeShell({
             <SidebarGroup>
               <SidebarGroupLabel>العمليات</SidebarGroupLabel>
               <SidebarMenuItem>
-                <SidebarMenuButton
-                  isActive={page === 'attendance'}
-                  tooltip="الحضور والانصراف"
-                  onClick={() => goTo('attendance')}
-                >
-                  <CalendarCheck />
-                  <SidebarLabel>الحضور والانصراف</SidebarLabel>
+                <SidebarMenuButton asChild isActive={page === 'attendance'} tooltip="الحضور والانصراف" onClick={closeMobile}>
+                  <NavLink to={NAV_PATHS.attendance}>
+                    <CalendarCheck />
+                    <SidebarLabel>الحضور والانصراف</SidebarLabel>
+                  </NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton
-                  isActive={page === 'tasks'}
-                  tooltip="المهام الخارجية"
-                  onClick={() => goTo('tasks')}
-                >
-                  <Briefcase />
-                  <SidebarLabel>المهام الخارجية</SidebarLabel>
+                <SidebarMenuButton asChild isActive={page === 'tasks'} tooltip="المهام الخارجية" onClick={closeMobile}>
+                  <NavLink to={NAV_PATHS.tasks}>
+                    <Briefcase />
+                    <SidebarLabel>المهام الخارجية</SidebarLabel>
+                  </NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton
-                  isActive={page === 'settings'}
-                  tooltip="الإعدادات"
-                  onClick={() => goTo('settings')}
-                >
-                  <Settings />
-                  <SidebarLabel>الإعدادات</SidebarLabel>
+                <SidebarMenuButton asChild isActive={page === 'settings'} tooltip="الإعدادات" onClick={closeMobile}>
+                  <NavLink to={NAV_PATHS.settings}>
+                    <Settings />
+                    <SidebarLabel>الإعدادات</SidebarLabel>
+                  </NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarGroup>
@@ -265,24 +234,7 @@ function HomeShell({
           </span>
         </header>
         <main className="min-h-0 max-w-full flex-1 overflow-auto p-7 max-md:px-3 max-md:pt-3.5 max-md:pb-5">
-          {page === 'employees' ? (
-            <EmployeesPage token={token} onUnauthorized={onSignOut} />
-          ) : page === 'departments' ? (
-            <DepartmentsPage token={token} onUnauthorized={onSignOut} />
-          ) : page === 'offices' ? (
-            <OfficesPage token={token} onUnauthorized={onSignOut} />
-          ) : page === 'attendance' ? (
-            <AttendancePage token={token} onUnauthorized={onSignOut} />
-          ) : page === 'tasks' ? (
-            <TasksPage token={token} onUnauthorized={onSignOut} />
-          ) : (
-            <SettingsPage
-              token={token}
-              profile={profile}
-              onUnauthorized={onSignOut}
-              onProfileUpdated={onProfileUpdated}
-            />
-          )}
+          <Outlet />
         </main>
       </div>
     </>
@@ -291,7 +243,6 @@ function HomeShell({
 
 function HomePage({ token, onSignOut }: { token: string; onSignOut: () => void }) {
   const [profile, setProfile] = useState<Profile | null>(null)
-  const [page, setPage] = useState<NavPage>('employees')
   const [accessChecked, setAccessChecked] = useState(false)
 
   useEffect(() => {
@@ -341,14 +292,43 @@ function HomePage({ token, onSignOut }: { token: string; onSignOut: () => void }
 
   return (
     <SidebarProvider>
-      <HomeShell
-        token={token}
-        profile={profile}
-        page={page}
-        onNavigate={setPage}
-        onSignOut={handleSignOut}
-        onProfileUpdated={setProfile}
-      />
+      <Routes>
+        <Route element={<HomeShell profile={profile} onSignOut={handleSignOut} />}>
+          <Route
+            path={NAV_PATHS.employees}
+            element={<EmployeesPage token={token} onUnauthorized={handleSignOut} />}
+          />
+          <Route
+            path={NAV_PATHS.departments}
+            element={<DepartmentsPage token={token} onUnauthorized={handleSignOut} />}
+          />
+          <Route
+            path={NAV_PATHS.offices}
+            element={<OfficesPage token={token} onUnauthorized={handleSignOut} />}
+          />
+          <Route
+            path={NAV_PATHS.attendance}
+            element={<AttendancePage token={token} onUnauthorized={handleSignOut} />}
+          />
+          <Route
+            path={NAV_PATHS.tasks}
+            element={<TasksPage token={token} onUnauthorized={handleSignOut} />}
+          />
+          <Route
+            path={NAV_PATHS.settings}
+            element={
+              <SettingsPage
+                token={token}
+                profile={profile}
+                onUnauthorized={handleSignOut}
+                onProfileUpdated={setProfile}
+              />
+            }
+          />
+          <Route path="/" element={<Navigate to={NAV_PATHS.employees} replace />} />
+          <Route path="*" element={<Navigate to={NAV_PATHS.employees} replace />} />
+        </Route>
+      </Routes>
     </SidebarProvider>
   )
 }

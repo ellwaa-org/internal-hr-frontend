@@ -28,6 +28,7 @@ import { queryKeys, QUERY_STALE_TIME_DEFAULT } from '@/lib/query-client'
 import { createDepartmentSchema, zodErrorMessage } from '@/lib/schemas'
 import { notify } from '@/lib/toast'
 import { useDialogState } from '@/lib/use-dialog-state'
+import { usePageParam } from '@/lib/use-page-param'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -81,7 +82,7 @@ function DepartmentsPage({
   onUnauthorized: () => void
 }) {
   const queryClient = useQueryClient()
-  const [page, setPage] = useState(1)
+  const [page, setPage] = usePageParam()
   const [limit] = useState(20)
   const [search, setSearch] = useState('')
   const [modal, setModal] = useState<ModalMode>(null)
