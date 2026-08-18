@@ -16,6 +16,8 @@ import {
   listOfficeUsers,
   listOffices,
   listUsers,
+  officeIdsOf,
+  officeNamesOf,
   unassignUserFromOffice,
   updateOffice,
   type CreateOfficeInput,
@@ -385,7 +387,7 @@ function OfficesPage({
     try {
       await assignUserToOffice(token, office.id, userId)
       notify.dismiss(toastId)
-      notify.success('تم تعيين الموظف للمكتب')
+      notify.success('تم إضافة الموظف إلى المكتب')
       setAssignUserId('')
       setModal({ type: 'members', office })
       await invalidate()
@@ -401,7 +403,7 @@ function OfficesPage({
     setBusy(true)
     const toastId = notify.loading('جارٍ فك التعيين...')
     try {
-      await unassignUserFromOffice(token, user.id)
+      await unassignUserFromOffice(token, user.id, office.id)
       notify.dismiss(toastId)
       notify.success(`تم فك تعيين ${user.fullName}`)
       setModal({ type: 'members', office })
@@ -423,9 +425,11 @@ function OfficesPage({
 
   const memberUsers = membersQuery.data?.data ?? []
   const memberIds = new Set(memberUsers.map((u) => u.id))
-  const assignCandidates = (assignUsersQuery.data?.data ?? []).filter(
-    (u) => !memberIds.has(u.id) && u.officeId !== membersOfficeId,
-  )
+  const assignCandidates = (assignUsersQuery.data?.data ?? []).filter((u) => {
+    if (memberIds.has(u.id)) return false
+    if (membersOfficeId == null) return true
+    return !officeIdsOf(u).includes(membersOfficeId)
+  })
 
   return (
     <PageShell>
@@ -882,13 +886,13 @@ function OfficesPage({
               <DialogHeader>
                 <DialogTitle>موظفو {membersDialog.data.office.name}</DialogTitle>
                 <DialogDescription>
-                  عيّن موظفين للمكتب أو أزلهم منه. التعيين يعيد تعيين الموظف من مكتبه الحالي إن وُجد.
+                  عيّن موظفين لهذا المكتب أو أزلهم منه. الموظف يمكن أن ينتمي لأكثر من مكتب في الوقت نفسه، والتعيين هنا يضيف المكتب دون إزالة التعيينات الأخرى.
                 </DialogDescription>
               </DialogHeader>
               <DialogBody>
                 <div className="flex flex-wrap items-end gap-2.5 max-[720px]:flex-col max-[720px]:items-stretch [&_button]:max-[720px]:w-full">
                   <div className="flex min-w-[min(100%,320px)] flex-1 flex-col gap-1.5 text-[13px] text-muted">
-                    <span>تعيين / إعادة تعيين موظف</span>
+                    <span>إضافة موظف إلى هذا المكتب</span>
                     <SearchableSelect
                       value={assignUserId || undefined}
                       onValueChange={setAssignUserId}
@@ -899,9 +903,9 @@ function OfficesPage({
                       options={assignCandidates.map((u) => ({
                         value: String(u.id),
                         label: `${u.fullName} (${u.employeeCode})${
-                          u.office?.name ? ` — ${u.office.name}` : ''
+                          officeNamesOf(u) ? ` — ${officeNamesOf(u)}` : ''
                         }`,
-                        keywords: `${u.fullName} ${u.employeeCode} ${u.office?.name ?? ''}`,
+                        keywords: `${u.fullName} ${u.employeeCode} ${officeNamesOf(u)}`,
                       }))}
                     />
                   </div>
@@ -990,10 +994,10 @@ function OfficesPage({
           {confirmAssignDialog.data ? (
             <>
               <DialogHeader>
-                <DialogTitle>تأكيد التعيين</DialogTitle>
+                <DialogTitle>تأكيد الإضافة</DialogTitle>
                 <DialogDescription>
-                  هل تريد تعيين {confirmAssignDialog.data.userLabel} في مكتب{' '}
-                  {confirmAssignDialog.data.office.name}؟
+                  هل تريد إضافة {confirmAssignDialog.data.userLabel} إلى مكتب{' '}
+                  {confirmAssignDialog.data.office.name}؟ سيبقى معيّناً في مكاتبه الأخرى إن وُجدت.
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>
@@ -1020,7 +1024,7 @@ function OfficesPage({
                   variant="primary"
                 >
                   {busy ? <Loader2 className="animate-spin" /> : <UserPlus />}
-                  تأكيد التعيين
+                  تأكيد الإضافة
                 </Button>
               </DialogFooter>
             </>

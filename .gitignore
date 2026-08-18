@@ -12,8 +12,11 @@ dist
 dist-ssr
 *.local
 
-# Local Docker env overrides (use .env.docker.example as a template)
-.env.docker
+# Environment files — never commit real values
+.env
+.env.*
+!.env.example
+!.env.*.example
 
 # Editor directories and files
 .vscode/*

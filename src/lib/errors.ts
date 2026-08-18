@@ -26,6 +26,8 @@ const MESSAGE_MAP: Array<[RegExp, string]> = [
   [/employee.?code.*already|duplicate.*code/i, 'كود الموظف مستخدم مسبقاً.'],
   [/phone.*already|duplicate.*phone/i, 'رقم الهاتف مستخدم مسبقاً.'],
   [/nothing to update/i, 'لا توجد تغييرات للحفظ.'],
+  [/task already ended/i, 'المهمة مغلقة مسبقاً.'],
+  [/another task is already open|open task/i, 'هناك مهمة مفتوحة بالفعل.'],
   [/network|failed to fetch|fetch failed/i, 'تعذر الاتصال بالخادم. تحقق من الشبكة.'],
   [/request failed/i, 'تعذر إتمام الطلب. حاول مرة أخرى.'],
   [/login response did not include/i, 'لم يتم استلام رمز الدخول من الخادم.'],
