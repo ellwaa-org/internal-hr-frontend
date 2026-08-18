@@ -12,7 +12,6 @@ dist-ssr
 # Secrets / local env (never send to build context)
 .env
 .env.*
-!.env.docker.example
 
 # Editor
 .vscode

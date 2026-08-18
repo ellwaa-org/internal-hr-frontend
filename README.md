@@ -9,10 +9,11 @@
 ## تشغيل اللوحة محلياً
 
 ```bash
+cp .env.example .env
 npm install
 npm run dev
 ```
 
-طلبات `/api` تُحوَّل إلى `https://hr-api-staging.ellwaa.com` ما لم تغيّر `VITE_API_PROXY_TARGET`.
+Set `VITE_API_PROXY_TARGET` in `.env`. Requests to `/api` are proxied to that host.
 
 الدخول مسموح لرتبتي `ADMIN` و `HR` فقط.

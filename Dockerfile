@@ -7,8 +7,8 @@
 #   Build Pack ........ Dockerfile
 #   Port Exposes ...... 3000
 #   Healthcheck Path .. /healthz
+#   Env (required) .... API_PROXY_TARGET  (from .env / Coolify)
 #   Env (optional) .... PORT=3000
-#                       API_PROXY_TARGET=https://hr-api-staging.ellwaa.com
 #
 # Local:
 #   docker compose up --build
@@ -32,7 +32,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-ARG VITE_API_URL=/api
+ARG VITE_API_URL
 ENV VITE_API_URL=${VITE_API_URL}
 ENV NODE_ENV=production
 
@@ -51,7 +51,6 @@ ENV NGINX_ENVSUBST_FILTER=^(API_PROXY_TARGET|PORT)$
 
 # Coolify proxies to this port (same as your other apps)
 ENV PORT=3000
-ENV API_PROXY_TARGET=https://hr-api-staging.ellwaa.com
 
 COPY docker/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY docker/18-validate-env.envsh /docker-entrypoint.d/18-validate-env.envsh
