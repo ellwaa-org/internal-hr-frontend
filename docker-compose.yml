@@ -12,13 +12,13 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: ${VITE_API_URL:-/api}
+        VITE_API_URL: ${VITE_API_URL}
     image: internal-hr:${IMAGE_TAG:-local}
     ports:
       - "${APP_PORT:-3000}:3000"
     environment:
       PORT: ${PORT:-3000}
-      API_PROXY_TARGET: ${API_PROXY_TARGET:-https://hr-api-staging.ellwaa.com}
+      API_PROXY_TARGET: ${VITE_API_PROXY_TARGET}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/healthz"]

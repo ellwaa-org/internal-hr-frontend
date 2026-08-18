@@ -7,9 +7,25 @@ import tailwindcss from '@tailwindcss/vite'
 const rootDir = path.dirname(fileURLToPath(import.meta.url))
 
 // https://vite.dev/config/
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const apiTarget = env.VITE_API_PROXY_TARGET || 'https://hr-api-staging.ellwaa.com'
+  const apiTarget = env.VITE_API_PROXY_TARGET
+
+  if (command === 'serve' && !apiTarget) {
+    throw new Error(
+      'Missing VITE_API_PROXY_TARGET. Copy .env.example to .env and set the API host.',
+    )
+  }
+
+  const proxy = apiTarget
+    ? {
+        '/api': {
+          target: apiTarget,
+          changeOrigin: true,
+          secure: true,
+        },
+      }
+    : undefined
 
   return {
     plugins: [react(), tailwindcss()],
@@ -18,23 +34,7 @@ export default defineConfig(({ mode }) => {
         '@': path.resolve(rootDir, './src'),
       },
     },
-    server: {
-      proxy: {
-        '/api': {
-          target: apiTarget,
-          changeOrigin: true,
-          secure: true,
-        },
-      },
-    },
-    preview: {
-      proxy: {
-        '/api': {
-          target: apiTarget,
-          changeOrigin: true,
-          secure: true,
-        },
-      },
-    },
+    server: { proxy },
+    preview: { proxy },
   }
 })

@@ -1,31 +1,48 @@
-﻿import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useQuery } from '@tanstack/react-query'
+﻿import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  CircleStop,
   Download,
   ExternalLink,
   Eye,
   Loader2,
+  MoreHorizontal,
+  Pencil,
   RefreshCw,
 } from 'lucide-react'
 import {
+  endFieldTask,
   exportTaskAttendanceExcel,
   listAttendance,
   listOfficeOptions,
   listUsers,
+  updateFieldTask,
   type AttendanceRecord,
   type DayStatus,
   type OfficeOption,
+  type UpdateFieldTaskInput,
   type UserRecord,
 } from '@/lib/api'
 import { isUnauthorizedError } from '@/lib/errors'
-import { formatDate, formatDateTime12, startOfMonthIso, todayIsoDate } from '@/lib/datetime'
+import {
+  formatDate,
+  formatDateTime12,
+  formatTime12,
+  fromDateTimeLocalInput,
+  startOfMonthIso,
+  toDateTimeLocalInput,
+  todayIsoDate,
+} from '@/lib/datetime'
 import { queryKeys, QUERY_STALE_TIME_FREQUENT } from '@/lib/query-client'
+import { updateFieldTaskSchema, zodErrorMessage } from '@/lib/schemas'
 import { notify } from '@/lib/toast'
 import { useDialogState } from '@/lib/use-dialog-state'
 import { usePageParam } from '@/lib/use-page-param'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { DayPicker } from '@/components/ui/day-picker'
 import { ExcelExportDialog } from '@/components/ui/excel-export-dialog'
+import { Input } from '@/components/ui/input'
 import {
   FiltersBar,
   PageHeader,
@@ -44,6 +61,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -52,9 +77,9 @@ import {
 } from '@/components/ui/select'
 
 const DAY_STATUS_LABELS: Record<DayStatus, string> = {
-  not_started: 'لم يبدأ',
-  checked_in: 'جارٍ التنفيذ',
-  completed: 'مكتمل',
+  not_started: 'لم تبدأ',
+  checked_in: 'جارية',
+  completed: 'مكتملة',
 }
 
 type TaskRow = {
@@ -63,18 +88,29 @@ type TaskRow = {
   userId?: number
   employeeName: string
   employeeCode?: string
+  officeId?: number | null
   officeName?: string | null
   taskName: string
+  notes?: string | null
   date?: string
   addressName?: string | null
   mapLink?: string | null
   lat?: number | null
   lng?: number | null
+  endLat?: number | null
+  endLng?: number | null
   startedAt?: string | null
   endedAt?: string | null
   workDurationMinutes?: number | null
   dayStatus?: DayStatus
 }
+
+type ModalMode =
+  | null
+  | { type: 'detail'; row: TaskRow }
+  | { type: 'edit'; row: TaskRow; draft?: UpdateFieldTaskInput }
+  | { type: 'confirm-edit'; row: TaskRow; payload: UpdateFieldTaskInput }
+  | { type: 'close'; row: TaskRow }
 
 function formatDateTime(value?: string | null): string {
   return formatDateTime12(value)
@@ -88,12 +124,20 @@ function formatDuration(minutes?: number | null): string {
   return m ? `${h} ساعة ${m} دقيقة` : `${h} ساعة`
 }
 
+function isTaskOpen(row: TaskRow): boolean {
+  return !row.endedAt
+}
+
 const STATUS_PILL_TONES = {
-  neutral: 'inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold bg-neutral-100 text-neutral-600',
-  success: 'inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold bg-success-soft text-success',
-  warning: 'inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold bg-warning-soft text-warning',
-  danger: 'inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold bg-danger-soft text-red-700',
-  info: 'inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold bg-info-soft text-info',
+  neutral:
+    'inline-flex max-w-full items-center whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold bg-neutral-100 text-neutral-600',
+  success:
+    'inline-flex max-w-full items-center whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold bg-success-soft text-success',
+  warning:
+    'inline-flex max-w-full items-center whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold bg-warning-soft text-warning',
+  danger:
+    'inline-flex max-w-full items-center whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold bg-danger-soft text-red-700',
+  info: 'inline-flex max-w-full items-center whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold bg-info-soft text-info',
 } as const
 
 function StatusPill({
@@ -106,11 +150,20 @@ function StatusPill({
   return <span className={STATUS_PILL_TONES[tone]}>{children}</span>
 }
 
-function dayStatusTone(status?: DayStatus): 'neutral' | 'success' | 'warning' | 'info' {
-  if (status === 'completed') return 'success'
-  if (status === 'checked_in') return 'info'
-  if (status === 'not_started') return 'neutral'
-  return 'neutral'
+function resolveTaskStatus(row: TaskRow): {
+  label: string
+  tone: 'neutral' | 'success' | 'info'
+} {
+  if (row.endedAt) return { label: 'مكتملة', tone: 'success' }
+  if (row.startedAt) return { label: 'جارية', tone: 'info' }
+  if (row.dayStatus) {
+    return {
+      label: DAY_STATUS_LABELS[row.dayStatus],
+      tone:
+        row.dayStatus === 'completed' ? 'success' : row.dayStatus === 'checked_in' ? 'info' : 'neutral',
+    }
+  }
+  return { label: 'لم تبدأ', tone: 'neutral' }
 }
 
 function buildTaskRows(
@@ -121,10 +174,6 @@ function buildTaskRows(
   const rows: TaskRow[] = []
 
   for (const record of records) {
-    const officeName =
-      record.office?.name ||
-      (record.officeId != null ? officesById.get(record.officeId)?.name : null)
-
     const tasks =
       record.tasks && record.tasks.length > 0
         ? record.tasks
@@ -132,6 +181,7 @@ function buildTaskRows(
             {
               id: record.id,
               taskName: record.taskName,
+              notes: record.notes,
               lat: record.lat,
               lng: record.lng,
               addressName: record.addressName,
@@ -140,6 +190,8 @@ function buildTaskRows(
               endedAt: record.endedAt ?? record.checkOutAt,
               workDurationMinutes: record.workDurationMinutes,
               userId: record.userId,
+              officeId: record.officeId,
+              office: record.office,
               date: record.date,
               user: record.user,
             },
@@ -157,6 +209,12 @@ function buildTaskRows(
         [task.user?.employeeCode, record.user?.employeeCode, fromUser?.employeeCode]
           .map((value) => (typeof value === 'string' ? value.trim() : ''))
           .find(Boolean) || undefined
+      const officeId = task.officeId ?? record.officeId ?? null
+      const officeName =
+        task.office?.name ||
+        record.office?.name ||
+        (officeId != null ? officesById.get(officeId)?.name : null) ||
+        null
 
       rows.push({
         id: task.id || record.id,
@@ -164,13 +222,17 @@ function buildTaskRows(
         userId,
         employeeName,
         employeeCode,
+        officeId,
         officeName,
         taskName: task.taskName || record.taskName || '—',
+        notes: task.notes ?? record.notes,
         date: task.date ?? record.date,
         addressName: task.addressName ?? record.addressName,
         mapLink: task.mapLink ?? record.mapLink,
         lat: task.lat ?? record.lat,
         lng: task.lng ?? record.lng,
+        endLat: task.endLat,
+        endLng: task.endLng,
         startedAt: task.startedAt ?? record.startedAt ?? record.checkInAt,
         endedAt: task.endedAt ?? record.endedAt ?? record.checkOutAt,
         workDurationMinutes: task.workDurationMinutes ?? record.workDurationMinutes,
@@ -189,6 +251,7 @@ function TasksPage({
   token: string
   onUnauthorized: () => void
 }) {
+  const queryClient = useQueryClient()
   const [page, setPage] = usePageParam()
   const [limit] = useState(20)
   const today = useMemo(() => todayIsoDate(), [])
@@ -200,8 +263,8 @@ function TasksPage({
   const [debouncedUserSearch, setDebouncedUserSearch] = useState('')
   const [exportOpen, setExportOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
-  const [selected, setSelected] = useState<TaskRow | null>(null)
-  const detailDialog = useDialogState(selected)
+  const [modal, setModal] = useState<ModalMode>(null)
+  const [busy, setBusy] = useState(false)
 
   const handleApiError = useCallback(
     (err: unknown, fallback: string) => {
@@ -285,8 +348,8 @@ function TasksPage({
     }
   }, [tasksQuery.error, handleApiError])
 
-  const offices = officesQuery.data ?? []
-  const allUsers = usersDirectoryQuery.data?.data ?? []
+  const offices = useMemo(() => officesQuery.data ?? [], [officesQuery.data])
+  const allUsers = useMemo(() => usersDirectoryQuery.data?.data ?? [], [usersDirectoryQuery.data])
 
   const usersById = useMemo(() => {
     const map = new Map<number, UserRecord>()
@@ -301,7 +364,7 @@ function TasksPage({
   }, [offices])
 
   const lookupsReady = usersDirectoryQuery.isFetched
-  const records = tasksQuery.data?.data ?? []
+  const records = useMemo(() => tasksQuery.data?.data ?? [], [tasksQuery.data])
   const allRows = useMemo(
     () => (lookupsReady ? buildTaskRows(records, usersById, officesById) : []),
     [lookupsReady, records, usersById, officesById],
@@ -333,6 +396,19 @@ function TasksPage({
     return `${fromIdx}–${toIdx} من ${total}`
   }, [rows.length, searching, page, limit, total])
 
+  const closeModal = () => {
+    if (!busy) setModal(null)
+  }
+
+  const invalidateTasks = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all })
+  }, [queryClient])
+
+  const detailDialog = useDialogState(modal?.type === 'detail' ? modal.row : null)
+  const editDialog = useDialogState(modal?.type === 'edit' ? modal : null)
+  const confirmEditDialog = useDialogState(modal?.type === 'confirm-edit' ? modal : null)
+  const closeDialog = useDialogState(modal?.type === 'close' ? modal.row : null)
+
   const exportExcel = async (range: { from: string; to: string }) => {
     setExporting(true)
     const toastId = notify.loading('جارٍ تصدير ملف Excel...')
@@ -349,11 +425,48 @@ function TasksPage({
     }
   }
 
+  const runEdit = async (row: TaskRow, payload: UpdateFieldTaskInput) => {
+    setBusy(true)
+    const toastId = notify.loading('جارٍ حفظ المهمة...')
+    try {
+      await updateFieldTask(token, row.id, payload)
+      notify.dismiss(toastId)
+      notify.success('تم تحديث المهمة')
+      setModal(null)
+      await invalidateTasks()
+    } catch (err) {
+      notify.dismiss(toastId)
+      handleApiError(err, 'تعذر تحديث المهمة')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const runClose = async (
+    row: TaskRow,
+    input: { notes?: string; endTime?: string },
+  ) => {
+    setBusy(true)
+    const toastId = notify.loading('جارٍ إغلاق المهمة...')
+    try {
+      await endFieldTask(token, row.id, input)
+      notify.dismiss(toastId)
+      notify.success('تم إغلاق المهمة')
+      setModal(null)
+      await invalidateTasks()
+    } catch (err) {
+      notify.dismiss(toastId)
+      handleApiError(err, 'تعذر إغلاق المهمة')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <PageShell>
       <PageHeader
         title="المهام الخارجية"
-        subtitle="متابعة مهام الموظفين خارج المكتب والمواقع والمدد الزمنية"
+        subtitle="متابعة مهام الموظفين خارج المكتب، مع إمكانية التعديل والإغلاق من الإدارة"
         action={
           <Button
             type="button"
@@ -401,9 +514,9 @@ function TasksPage({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">كل الحالات</SelectItem>
-            <SelectItem value="not_started">لم يبدأ</SelectItem>
-            <SelectItem value="checked_in">جارٍ التنفيذ</SelectItem>
-            <SelectItem value="completed">مكتمل</SelectItem>
+            <SelectItem value="not_started">لم تبدأ</SelectItem>
+            <SelectItem value="checked_in">جارية</SelectItem>
+            <SelectItem value="completed">مكتملة</SelectItem>
           </SelectContent>
         </Select>
 
@@ -464,97 +577,120 @@ function TasksPage({
           <thead>
             <tr>
               <Th className="min-w-[168px]">الموظف</Th>
-              <Th>المهمة</Th>
+              <Th className="min-w-[200px]">المهمة</Th>
               <Th>التاريخ</Th>
-              <Th>الموقع</Th>
               <Th>البداية</Th>
               <Th>النهاية</Th>
               <Th>المدة</Th>
               <Th>الحالة</Th>
-              <ThActions>تفاصيل</ThActions>
+              <ThActions>إجراءات</ThActions>
             </tr>
           </thead>
           <tbody>
             {loading && rows.length === 0 ? (
-              <TableMessage colSpan={9}>
+              <TableMessage colSpan={8}>
                 <Loader2 className="me-2 inline-block animate-spin align-[-3px]" />
                 جارٍ تحميل المهام...
               </TableMessage>
             ) : rows.length === 0 ? (
-              <TableMessage colSpan={9}>لا توجد مهام خارجية</TableMessage>
+              <TableMessage colSpan={8}>لا توجد مهام خارجية</TableMessage>
             ) : (
-              rows.map((row) => (
+              rows.map((row) => {
+                const status = resolveTaskStatus(row)
+                return (
                 <Tr key={`${row.recordId}-${row.id}`}>
                   <Td className="min-w-[168px] max-w-[240px]">
-                    <span className="block truncate font-semibold text-foreground" title={row.employeeName}>
-                      {row.employeeName}
-                    </span>
-                  </Td>
-                  <Td>
-                    <span className="line-clamp-2 leading-[1.35]" title={row.taskName}>
-                      {row.taskName}
-                    </span>
-                  </Td>
-                  <Td className="whitespace-nowrap text-muted">{formatDate(row.date)}</Td>
-                  <Td>
                     <div className="flex min-w-0 flex-col gap-0.5">
-                      <span
-                        className="line-clamp-2 leading-[1.35] text-muted"
-                        title={row.addressName || undefined}
-                      >
-                        {row.addressName || '—'}
+                      <span className="block truncate font-semibold text-foreground" title={row.employeeName}>
+                        {row.employeeName}
                       </span>
-                      {row.mapLink && (
-                        <a
-                          href={row.mapLink}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex w-fit items-center gap-1 text-xs text-info no-underline hover:underline"
-                        >
-                          الخريطة <ExternalLink size={12} />
-                        </a>
-                      )}
+                      {row.officeName ? (
+                        <span className="truncate text-xs text-muted" title={row.officeName}>
+                          {row.officeName}
+                        </span>
+                      ) : null}
                     </div>
                   </Td>
-                  <Td className="whitespace-nowrap text-muted">{formatDateTime(row.startedAt)}</Td>
-                  <Td className="whitespace-nowrap text-muted">{formatDateTime(row.endedAt)}</Td>
+                  <Td className="min-w-[200px] max-w-[320px]">
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <span className="block truncate font-medium leading-[1.35]" title={row.taskName}>
+                        {row.taskName}
+                      </span>
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <span className="truncate text-xs text-muted" title={row.addressName || undefined}>
+                          {row.addressName || 'بدون عنوان'}
+                        </span>
+                        {row.mapLink ? (
+                          <a
+                            href={row.mapLink}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex shrink-0 items-center gap-0.5 text-xs text-info no-underline hover:underline"
+                          >
+                            الخريطة <ExternalLink size={11} />
+                          </a>
+                        ) : null}
+                      </span>
+                    </div>
+                  </Td>
+                  <Td className="whitespace-nowrap text-muted">{formatDate(row.date)}</Td>
+                  <Td className="whitespace-nowrap text-muted" title={formatDateTime(row.startedAt)}>
+                    {formatTime12(row.startedAt)}
+                  </Td>
+                  <Td className="whitespace-nowrap text-muted" title={formatDateTime(row.endedAt)}>
+                    {formatTime12(row.endedAt)}
+                  </Td>
                   <Td className="whitespace-nowrap tabular-nums text-muted">
                     {formatDuration(row.workDurationMinutes)}
                   </Td>
-                  <Td>
-                    {row.dayStatus ? (
-                      <StatusPill tone={dayStatusTone(row.dayStatus)}>
-                        {DAY_STATUS_LABELS[row.dayStatus]}
-                      </StatusPill>
-                    ) : row.endedAt ? (
-                      <StatusPill tone="success">مكتمل</StatusPill>
-                    ) : row.startedAt ? (
-                      <StatusPill tone="info">جارٍ التنفيذ</StatusPill>
-                    ) : (
-                      <span className="text-muted">—</span>
-                    )}
+                  <Td className="whitespace-nowrap">
+                    <StatusPill tone={status.tone}>{status.label}</StatusPill>
                   </Td>
                   <TdActions>
-                    <Button
-                      type="button"
-                      onClick={() => setSelected(row)}
-                      variant="secondary"
-                      size="sm"
-                      className="h-8 w-8 p-0"
-                      title="عرض التفاصيل"
-                      aria-label="عرض التفاصيل"
-                    >
-                      <Eye />
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="h-8 w-8 p-0"
+                          aria-label={`إجراءات ${row.taskName}`}
+                          title="إجراءات"
+                        >
+                          <MoreHorizontal />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="min-w-56">
+                        <DropdownMenuLabel>
+                          {row.employeeName}
+                        </DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onSelect={() => setModal({ type: 'detail', row })}>
+                          <Eye />
+                          عرض التفاصيل
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => setModal({ type: 'edit', row })}>
+                          <Pencil />
+                          تعديل
+                        </DropdownMenuItem>
+                        {isTaskOpen(row) ? (
+                          <DropdownMenuItem onSelect={() => setModal({ type: 'close', row })}>
+                            <CircleStop />
+                            إغلاق المهمة
+                          </DropdownMenuItem>
+                        ) : null}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TdActions>
                 </Tr>
-              ))
+                )
+              })
             )}
           </tbody>
         </Table>
       </TableSection>
 
-      <Dialog open={detailDialog.open} onOpenChange={(open) => !open && setSelected(null)}>
+      <Dialog open={detailDialog.open} onOpenChange={(open) => !open && closeModal()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>تفاصيل المهمة</DialogTitle>
@@ -565,63 +701,31 @@ function TasksPage({
               <p className="m-0 text-sm text-muted">لا توجد تفاصيل متاحة</p>
             ) : (
               <div className="flex flex-col gap-3">
-                <div className="grid grid-cols-[110px_1fr] items-start gap-2">
-                  <span className="text-[13px] text-muted">الموظف</span>
-                  <span className="break-words text-sm font-medium text-foreground">
-                    {detailDialog.data.employeeName}
-                    {detailDialog.data.employeeCode ? ` · ${detailDialog.data.employeeCode}` : ''}
-                  </span>
-                </div>
-                <div className="grid grid-cols-[110px_1fr] items-start gap-2">
-                  <span className="text-[13px] text-muted">المهمة</span>
-                  <span className="break-words text-sm font-medium text-foreground">
-                    {detailDialog.data.taskName}
-                  </span>
-                </div>
-                <div className="grid grid-cols-[110px_1fr] items-start gap-2">
-                  <span className="text-[13px] text-muted">التاريخ</span>
-                  <span className="break-words text-sm font-medium text-foreground">
-                    {formatDate(detailDialog.data.date)}
-                  </span>
-                </div>
-                <div className="grid grid-cols-[110px_1fr] items-start gap-2">
-                  <span className="text-[13px] text-muted">الموقع</span>
-                  <span className="break-words text-sm font-medium text-foreground">
-                    {detailDialog.data.addressName || '—'}
-                  </span>
-                </div>
-                <div className="grid grid-cols-[110px_1fr] items-start gap-2">
-                  <span className="text-[13px] text-muted">الإحداثيات</span>
-                  <span className="break-words text-sm font-medium text-foreground">
-                    {detailDialog.data.lat != null && detailDialog.data.lng != null
-                      ? `${detailDialog.data.lat}, ${detailDialog.data.lng}`
-                      : '—'}
-                  </span>
-                </div>
-                <div className="grid grid-cols-[110px_1fr] items-start gap-2">
-                  <span className="text-[13px] text-muted">البداية</span>
-                  <span className="break-words text-sm font-medium text-foreground">
-                    {formatDateTime(detailDialog.data.startedAt)}
-                  </span>
-                </div>
-                <div className="grid grid-cols-[110px_1fr] items-start gap-2">
-                  <span className="text-[13px] text-muted">النهاية</span>
-                  <span className="break-words text-sm font-medium text-foreground">
-                    {formatDateTime(detailDialog.data.endedAt)}
-                  </span>
-                </div>
-                <div className="grid grid-cols-[110px_1fr] items-start gap-2">
-                  <span className="text-[13px] text-muted">المدة</span>
-                  <span className="break-words text-sm font-medium text-foreground">
-                    {formatDuration(detailDialog.data.workDurationMinutes)}
-                  </span>
-                </div>
+                <DetailRow label="الموظف">
+                  {detailDialog.data.employeeName}
+                  {detailDialog.data.employeeCode ? ` · ${detailDialog.data.employeeCode}` : ''}
+                </DetailRow>
+                <DetailRow label="المهمة">{detailDialog.data.taskName}</DetailRow>
+                <DetailRow label="المكتب">{detailDialog.data.officeName || '—'}</DetailRow>
+                <DetailRow label="التاريخ">{formatDate(detailDialog.data.date)}</DetailRow>
+                <DetailRow label="الموقع">{detailDialog.data.addressName || '—'}</DetailRow>
+                <DetailRow label="الإحداثيات">
+                  {detailDialog.data.lat != null && detailDialog.data.lng != null
+                    ? `${detailDialog.data.lat}, ${detailDialog.data.lng}`
+                    : '—'}
+                </DetailRow>
+                <DetailRow label="البداية">{formatDateTime(detailDialog.data.startedAt)}</DetailRow>
+                <DetailRow label="النهاية">{formatDateTime(detailDialog.data.endedAt)}</DetailRow>
+                <DetailRow label="المدة">{formatDuration(detailDialog.data.workDurationMinutes)}</DetailRow>
+                {detailDialog.data.notes ? (
+                  <DetailRow label="ملاحظات">{detailDialog.data.notes}</DetailRow>
+                ) : null}
                 {detailDialog.data.mapLink && (
                   <a
                     href={detailDialog.data.mapLink}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-[10px] border border-transparent px-3.5 text-sm font-semibold transition-[background,border-color,opacity] disabled:cursor-not-allowed disabled:opacity-55 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0 h-[34px] px-2.5 text-[13px] border-border bg-white text-foreground hover:enabled:bg-hover w-fit"
+                    className="inline-flex h-10 w-fit cursor-pointer items-center justify-center gap-2 rounded-[10px] border border-border bg-white px-3.5 text-sm font-semibold text-foreground transition-[background,border-color,opacity] hover:enabled:bg-hover disabled:cursor-not-allowed disabled:opacity-55 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0"
                   >
                     <ExternalLink />
                     فتح الخريطة
@@ -631,13 +735,373 @@ function TasksPage({
             )}
           </DialogBody>
           <DialogFooter>
-            <Button type="button" onClick={() => setSelected(null)} variant="secondary">
-              إغلاق
-            </Button>
+            {detailDialog.data ? (
+              <>
+                <Button type="button" onClick={closeModal} variant="secondary">
+                  إغلاق
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => setModal({ type: 'edit', row: detailDialog.data! })}
+                  variant="primary"
+                >
+                  <Pencil />
+                  تعديل
+                </Button>
+              </>
+            ) : (
+              <Button type="button" onClick={closeModal} variant="secondary">
+                إغلاق
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={editDialog.open} onOpenChange={(open) => !open && closeModal()}>
+        <DialogContent size="lg">
+          {editDialog.data ? (
+            <TaskEditForm
+              key={`${editDialog.data.row.id}-${editDialog.data.draft ? 'draft' : 'initial'}`}
+              row={editDialog.data.row}
+              draft={editDialog.data.draft}
+              offices={offices}
+              busy={busy}
+              onClose={closeModal}
+              onSubmit={(payload) =>
+                setModal({ type: 'confirm-edit', row: editDialog.data!.row, payload })
+              }
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmEditDialog.open} onOpenChange={(open) => !open && closeModal()}>
+        <DialogContent>
+          {confirmEditDialog.data ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>تأكيد تعديل المهمة</DialogTitle>
+                <DialogDescription>
+                  سيتم حفظ تعديلات مهمة {confirmEditDialog.data.row.taskName} للموظف{' '}
+                  {confirmEditDialog.data.row.employeeName}.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    const data = confirmEditDialog.data
+                    if (!data) return
+                    setModal({ type: 'edit', row: data.row, draft: data.payload })
+                  }}
+                  variant="secondary"
+                >
+                  إلغاء
+                </Button>
+                <Button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    const data = confirmEditDialog.data
+                    if (!data) return
+                    void runEdit(data.row, data.payload)
+                  }}
+                  variant="primary"
+                >
+                  {busy ? <Loader2 className="animate-spin" /> : <Pencil />}
+                  تأكيد الحفظ
+                </Button>
+              </DialogFooter>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={closeDialog.open} onOpenChange={(open) => !open && closeModal()}>
+        <DialogContent>
+          {closeDialog.data ? (
+            <TaskCloseForm
+              row={closeDialog.data}
+              busy={busy}
+              onClose={closeModal}
+              onSubmit={(input) => void runClose(closeDialog.data!, input)}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </PageShell>
+  )
+}
+
+function DetailRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="grid grid-cols-[110px_1fr] items-start gap-2">
+      <span className="text-[13px] text-muted">{label}</span>
+      <span className="break-words text-sm font-medium text-foreground">{children}</span>
+    </div>
+  )
+}
+
+function TaskEditForm({
+  row,
+  draft,
+  offices,
+  busy,
+  onClose,
+  onSubmit,
+}: {
+  row: TaskRow
+  draft?: UpdateFieldTaskInput
+  offices: OfficeOption[]
+  busy: boolean
+  onClose: () => void
+  onSubmit: (payload: UpdateFieldTaskInput) => void
+}) {
+  const [taskName, setTaskName] = useState(
+    draft?.taskName ?? (row.taskName === '—' ? '' : row.taskName),
+  )
+  const [notes, setNotes] = useState((draft?.notes ?? (draft ? '' : row.notes)) || '')
+  const [date, setDate] = useState(draft?.date ?? row.date?.slice(0, 10) ?? todayIsoDate())
+  const [selectedOfficeId, setSelectedOfficeId] = useState(
+    draft?.officeId != null
+      ? String(draft.officeId)
+      : draft && draft.officeId === null
+        ? 'none'
+        : row.officeId != null
+          ? String(row.officeId)
+          : 'none',
+  )
+  const [addressName, setAddressName] = useState(
+    (draft?.addressName ?? (draft ? '' : row.addressName)) || '',
+  )
+  const [mapLink, setMapLink] = useState((draft?.mapLink ?? (draft ? '' : row.mapLink)) || '')
+  const [startTime, setStartTime] = useState(
+    draft?.startTime ? toDateTimeLocalInput(draft.startTime) : toDateTimeLocalInput(row.startedAt),
+  )
+  const [endTime, setEndTime] = useState(
+    draft?.endTime ? toDateTimeLocalInput(draft.endTime) : toDateTimeLocalInput(row.endedAt),
+  )
+  const [reopen, setReopen] = useState(draft ? draft.endTime === null : false)
+  const [formError, setFormError] = useState<string | null>(null)
+
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault()
+    setFormError(null)
+
+    const payload: UpdateFieldTaskInput = {
+      taskName: taskName.trim(),
+      notes: notes.trim() || null,
+      date,
+      officeId: selectedOfficeId === 'none' ? null : Number(selectedOfficeId),
+      addressName: addressName.trim() || null,
+      mapLink: mapLink.trim() || null,
+    }
+
+    const startIso = fromDateTimeLocalInput(startTime)
+    if (startIso) payload.startTime = startIso
+
+    if (reopen) {
+      payload.endTime = null
+    } else {
+      const endIso = fromDateTimeLocalInput(endTime)
+      if (endIso) payload.endTime = endIso
+    }
+
+    const parsed = updateFieldTaskSchema.safeParse(payload)
+    if (!parsed.success) {
+      const msg = zodErrorMessage(parsed.error)
+      setFormError(msg)
+      notify.error(msg)
+      return
+    }
+    if (!parsed.data.taskName) {
+      const msg = 'اسم المهمة مطلوب.'
+      setFormError(msg)
+      notify.error(msg)
+      return
+    }
+    onSubmit(parsed.data)
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <DialogHeader>
+        <DialogTitle>تعديل المهمة</DialogTitle>
+        <DialogDescription>
+          تعديل بيانات مهمة {row.employeeName}
+          {row.employeeCode ? ` · ${row.employeeCode}` : ''}
+        </DialogDescription>
+      </DialogHeader>
+
+      <DialogBody className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
+        <label className="col-span-full flex flex-col gap-1.5 text-[13px] text-muted">
+          <span>اسم المهمة *</span>
+          <Input value={taskName} onChange={(e) => setTaskName(e.target.value)} />
+        </label>
+
+        <label className="flex flex-col gap-1.5 text-[13px] text-muted">
+          <span>التاريخ</span>
+          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </label>
+
+        <div className="flex flex-col gap-1.5 text-[13px] text-muted">
+          <span>المكتب</span>
+          <Select value={selectedOfficeId} onValueChange={setSelectedOfficeId}>
+            <SelectTrigger className="w-full" aria-label="المكتب">
+              <SelectValue placeholder="بدون مكتب" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">بدون مكتب</SelectItem>
+              {offices.map((o) => (
+                <SelectItem key={o.id} value={String(o.id)}>
+                  {o.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <label className="flex flex-col gap-1.5 text-[13px] text-muted">
+          <span>وقت البداية</span>
+          <Input
+            type="datetime-local"
+            value={startTime}
+            onChange={(e) => setStartTime(e.target.value)}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5 text-[13px] text-muted">
+          <span>وقت النهاية</span>
+          <Input
+            type="datetime-local"
+            value={endTime}
+            disabled={reopen}
+            onChange={(e) => setEndTime(e.target.value)}
+          />
+        </label>
+
+        {row.endedAt ? (
+          <label className="col-span-full flex flex-row items-center gap-2.5 text-[13px] text-muted">
+            <Checkbox
+              checked={reopen}
+              onCheckedChange={(checked) => setReopen(checked === true)}
+              id="task-reopen"
+            />
+            <span>إعادة فتح المهمة (إلغاء وقت النهاية)</span>
+          </label>
+        ) : null}
+
+        <label className="col-span-full flex flex-col gap-1.5 text-[13px] text-muted">
+          <span>العنوان</span>
+          <Input
+            value={addressName}
+            onChange={(e) => setAddressName(e.target.value)}
+            placeholder="اختياري"
+          />
+        </label>
+
+        <label className="col-span-full flex flex-col gap-1.5 text-[13px] text-muted">
+          <span>رابط الخريطة</span>
+          <Input
+            value={mapLink}
+            onChange={(e) => setMapLink(e.target.value)}
+            placeholder="https://maps.google.com/..."
+            dir="ltr"
+          />
+        </label>
+
+        <label className="col-span-full flex flex-col gap-1.5 text-[13px] text-muted">
+          <span>ملاحظات</span>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="اختياري"
+            rows={3}
+            maxLength={1000}
+            className="min-h-[84px] w-full resize-y rounded-[10px] border border-border bg-white px-3 py-2.5 text-sm text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-neutral-400 focus:border-neutral-900 focus:shadow-[0_0_0_2px_rgba(17,17,17,0.12)] disabled:cursor-not-allowed disabled:opacity-55"
+          />
+        </label>
+
+        {formError && <p className="col-span-full m-0 text-[13px] font-semibold text-red-700">{formError}</p>}
+      </DialogBody>
+
+      <DialogFooter>
+        <Button type="button" disabled={busy} onClick={onClose} variant="secondary">
+          إلغاء
+        </Button>
+        <Button type="submit" disabled={busy} variant="primary">
+          {busy ? <Loader2 className="animate-spin" /> : <Pencil />}
+          حفظ
+        </Button>
+      </DialogFooter>
+    </form>
+  )
+}
+
+function TaskCloseForm({
+  row,
+  busy,
+  onClose,
+  onSubmit,
+}: {
+  row: TaskRow
+  busy: boolean
+  onClose: () => void
+  onSubmit: (input: { notes?: string; endTime?: string }) => void
+}) {
+  const [notes, setNotes] = useState('')
+  const [endTime, setEndTime] = useState('')
+
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault()
+    const endIso = fromDateTimeLocalInput(endTime)
+    onSubmit({
+      notes: notes.trim() || undefined,
+      endTime: endIso,
+    })
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <DialogHeader>
+        <DialogTitle>إغلاق المهمة</DialogTitle>
+        <DialogDescription>
+          سيتم إنهاء مهمة {row.taskName} للموظف {row.employeeName}. يمكن ترك الوقت فارغاً لاستخدام الوقت الحالي.
+        </DialogDescription>
+      </DialogHeader>
+      <DialogBody>
+        <label className="flex flex-col gap-1.5 text-[13px] text-muted">
+          <span>وقت النهاية (اختياري)</span>
+          <Input
+            type="datetime-local"
+            value={endTime}
+            onChange={(e) => setEndTime(e.target.value)}
+          />
+        </label>
+        <label className="flex flex-col gap-1.5 text-[13px] text-muted">
+          <span>ملاحظات (اختياري)</span>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="سبب الإغلاق أو ملاحظة للإدارة"
+            rows={3}
+            maxLength={1000}
+            className="min-h-[84px] w-full resize-y rounded-[10px] border border-border bg-white px-3 py-2.5 text-sm text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-neutral-400 focus:border-neutral-900 focus:shadow-[0_0_0_2px_rgba(17,17,17,0.12)] disabled:cursor-not-allowed disabled:opacity-55"
+          />
+        </label>
+      </DialogBody>
+      <DialogFooter>
+        <Button type="button" disabled={busy} onClick={onClose} variant="secondary">
+          إلغاء
+        </Button>
+        <Button type="submit" disabled={busy} variant="primary">
+          {busy ? <Loader2 className="animate-spin" /> : <CircleStop />}
+          تأكيد الإغلاق
+        </Button>
+      </DialogFooter>
+    </form>
   )
 }
 

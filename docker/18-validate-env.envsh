@@ -1,6 +1,5 @@
 # Sourced before envsubst. Never crash on missing/empty Coolify env.
 
-DEFAULT_API_PROXY_TARGET="https://hr-api-staging.ellwaa.com"
 DEFAULT_PORT="3000"
 
 if [ -z "${PORT:-}" ]; then
@@ -19,9 +18,8 @@ case "${PORT}" in
 esac
 
 if [ -z "${API_PROXY_TARGET:-}" ]; then
-  API_PROXY_TARGET="${DEFAULT_API_PROXY_TARGET}"
-  export API_PROXY_TARGET
-  echo "WARN: API_PROXY_TARGET empty — using ${API_PROXY_TARGET}"
+  echo "ERROR: API_PROXY_TARGET is required. Set it from .env or the host environment."
+  exit 1
 fi
 
 case "${API_PROXY_TARGET}" in
@@ -35,9 +33,8 @@ case "${API_PROXY_TARGET}" in
   http://*|https://*)
     ;;
   *)
-    echo "WARN: API_PROXY_TARGET invalid (${API_PROXY_TARGET}) — using ${DEFAULT_API_PROXY_TARGET}"
-    API_PROXY_TARGET="${DEFAULT_API_PROXY_TARGET}"
-    export API_PROXY_TARGET
+    echo "ERROR: API_PROXY_TARGET must be an http(s) URL. Got: ${API_PROXY_TARGET}"
+    exit 1
     ;;
 esac
 

@@ -23,6 +23,8 @@ import {
   updateDepartmentSchema,
   updateOfficeSchema,
   updateUserSchema,
+  updateFieldTaskSchema,
+  endFieldTaskSchema,
   type AttendanceRecord,
   type AttendanceTask,
   type AttendanceType,
@@ -55,6 +57,8 @@ import {
   type UpdateDepartmentInput,
   type UpdateOfficeInput,
   type UpdateUserInput,
+  type UpdateFieldTaskInput,
+  type EndFieldTaskInput,
   type UserRecord,
 } from './schemas'
 
@@ -91,6 +95,8 @@ export type {
   UpdateDepartmentInput,
   UpdateOfficeInput,
   UpdateUserInput,
+  UpdateFieldTaskInput,
+  EndFieldTaskInput,
   UserRecord,
 }
 
@@ -194,6 +200,8 @@ export async function getProfile(token: string): Promise<Profile> {
     bio: user.bio ?? null,
     departmentId: user.departmentId ?? null,
     officeId: user.officeId ?? null,
+    officeIds: user.officeIds,
+    offices: user.offices,
   }
 }
 
@@ -239,7 +247,31 @@ function asNestedOption(
 
 function asUserRecord(raw: Record<string, unknown>): UserRecord {
   const department = asNestedOption(raw.department)
-  const office = asNestedOption(raw.office)
+  const nestedOffices = Array.isArray(raw.offices)
+    ? (raw.offices as unknown[])
+        .map((item) => asNestedOption(item))
+        .filter((item): item is { id: number; name: string } => item != null)
+    : []
+  const officeIdsFromRaw = Array.isArray(raw.officeIds)
+    ? (raw.officeIds as unknown[])
+        .map((value) => Number(value))
+        .filter((value) => Number.isFinite(value))
+    : []
+  const office = nestedOffices[0] ?? asNestedOption(raw.office)
+  const officeIds =
+    officeIdsFromRaw.length > 0
+      ? officeIdsFromRaw
+      : nestedOffices.length > 0
+        ? nestedOffices.map((item) => item.id)
+        : office
+          ? [office.id]
+          : []
+  const offices =
+    nestedOffices.length > 0
+      ? nestedOffices
+      : office
+        ? [office]
+        : undefined
 
   return {
     id: Number(raw.id),
@@ -259,12 +291,56 @@ function asUserRecord(raw: Record<string, unknown>): UserRecord {
     department,
     officeId:
       raw.officeId === null || raw.officeId === undefined
-        ? office?.id ?? null
+        ? office?.id ?? officeIds[0] ?? null
         : Number(raw.officeId),
     office,
+    officeIds: officeIds.length > 0 ? officeIds : undefined,
+    offices,
     createdAt: raw.createdAt as string | undefined,
     updatedAt: raw.updatedAt as string | undefined,
   }
+}
+
+export function officeIdsOf(user: {
+  officeId?: number | null
+  officeIds?: number[]
+  offices?: { id: number }[] | null
+  office?: { id: number } | null
+}): number[] {
+  if (user.officeIds && user.officeIds.length > 0) {
+    return [...new Set(user.officeIds)]
+  }
+  if (user.offices && user.offices.length > 0) {
+    return [...new Set(user.offices.map((item) => item.id))]
+  }
+  if (user.office?.id != null) return [user.office.id]
+  if (user.officeId != null) return [user.officeId]
+  return []
+}
+
+export function officeNamesOf(
+  user: {
+    office?: { name?: string } | null
+    offices?: { id: number; name: string }[] | null
+    officeId?: number | null
+    officeIds?: number[]
+  },
+  officesById?: Map<number, { name: string }>,
+): string {
+  if (user.offices && user.offices.length > 0) {
+    return user.offices
+      .map((item) => item.name)
+      .filter(Boolean)
+      .join(' · ')
+  }
+  const ids = officeIdsOf(user)
+  if (officesById && ids.length > 0) {
+    return ids
+      .map((id) => officesById.get(id)?.name)
+      .filter(Boolean)
+      .join(' · ')
+  }
+  return user.office?.name ?? ''
 }
 
 function normalizePaginated<T>(
@@ -415,13 +491,20 @@ function asAttendanceTask(
     ? pickString(nestedUser.employeeCode, nestedUser.code)
     : null
 
+  const office = asNestedOption(raw.office)
+
   return {
     id: String(raw.id ?? raw.taskId ?? ''),
     taskName: pickString(raw.taskName, raw.name) ?? undefined,
+    notes: pickString(raw.notes),
     lat: pickNumber(raw.startLat, raw.lat, raw.latitude, raw.checkInLat),
     lng: pickNumber(raw.startLng, raw.lng, raw.longitude, raw.checkInLng),
+    endLat: pickNumber(raw.endLat, raw.checkOutLat),
+    endLng: pickNumber(raw.endLng, raw.checkOutLng),
     addressName: pickString(raw.addressName, raw.address, raw.locationName),
     mapLink: pickString(raw.mapLink, raw.mapUrl, raw.googleMapsLink),
+    officeId: pickNumber(raw.officeId) ?? office?.id ?? null,
+    office,
     startedAt: pickString(
       raw.startTime,
       raw.startedAt,
@@ -683,6 +766,7 @@ export async function listUsers(
     limit,
     role: validated.role,
     departmentId: validated.departmentId,
+    officeId: validated.officeId,
     isActive: validated.isActive,
     search: validated.search,
   })
@@ -957,12 +1041,19 @@ export function assignUserToOffice(
   )
 }
 
-export function unassignUserFromOffice(token: string, userId: number): Promise<unknown> {
+export function unassignUserFromOffice(
+  token: string,
+  userId: number,
+  officeId?: number,
+): Promise<unknown> {
   return request(
     '/office/unassign',
     {
       method: 'POST',
-      body: JSON.stringify({ userId }),
+      body: JSON.stringify({
+        userId,
+        ...(officeId != null ? { officeId } : {}),
+      }),
     },
     token,
   )
@@ -1048,6 +1139,8 @@ function asAttendanceUserItem(raw: Record<string, unknown>): AttendanceUserItem 
       points: user.points,
       departmentId: user.departmentId,
       officeId: user.officeId,
+      officeIds: user.officeIds,
+      offices: user.offices,
       isActive: user.isActive,
       phoneNumber: user.phoneNumber,
       email: user.email,
@@ -1178,7 +1271,7 @@ async function downloadBinary(
 
   const blob = await res.blob()
   const disposition = res.headers.get('content-disposition')
-  const matched = disposition?.match(/filename\*?=(?:UTF-8''|")?([^\";]+)/i)
+  const matched = disposition?.match(/filename\*?=(?:UTF-8''|")?([^";]+)/i)
   const filename = matched?.[1]
     ? decodeURIComponent(matched[1].replace(/"/g, ''))
     : fallbackFilename
@@ -1216,6 +1309,38 @@ export async function exportOfficeAttendanceExcel(
     `/attendance/office/excel${qs}`,
     token,
     `office-attendance-${validated.from}_${validated.to}.xlsx`,
+  )
+}
+
+export function updateFieldTask(
+  token: string,
+  id: string,
+  input: UpdateFieldTaskInput,
+): Promise<unknown> {
+  const payload = parseOrThrow(updateFieldTaskSchema, input)
+  return request(
+    `/attendance/task/${id}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+    token,
+  )
+}
+
+export function endFieldTask(
+  token: string,
+  id: string,
+  input: EndFieldTaskInput = {},
+): Promise<unknown> {
+  const payload = parseOrThrow(endFieldTaskSchema, input)
+  return request(
+    `/attendance/task/${id}/end`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+    token,
   )
 }
 
