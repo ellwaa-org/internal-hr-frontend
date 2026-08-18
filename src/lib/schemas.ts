@@ -54,6 +54,7 @@ export const registerUserSchema = z.object({
     .optional()
     .nullable(),
   officeId: z.union([z.number().int().positive(), z.null()]).optional().nullable(),
+  officeIds: z.array(z.number().int().positive()).optional(),
   bio: bioFieldSchema,
 })
 
@@ -85,6 +86,7 @@ export const updateUserSchema = z.object({
     .optional(),
   departmentId: z.union([z.number().int().positive(), z.null()]).optional().nullable(),
   officeId: z.union([z.number().int().positive(), z.null()]).optional().nullable(),
+  officeIds: z.array(z.number().int().positive()).optional(),
   isActive: z.boolean().optional(),
   fullName: z
     .string()
@@ -118,6 +120,7 @@ export const listUsersParamsSchema = z.object({
   limit: z.number().int().positive().max(100).optional(),
   role: roleSchema.optional(),
   departmentId: z.number().int().positive().optional(),
+  officeId: z.number().int().positive().optional(),
   isActive: z.boolean().optional(),
   search: z.string().trim().optional(),
 })
@@ -244,17 +247,62 @@ export const exportAttendanceExcelParamsSchema = z.object({
   to: z.string().min(1, 'تاريخ النهاية مطلوب.'),
 })
 
+const isoDateSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'صيغة التاريخ غير صالحة.')
+
+const nullableTextSchema = z
+  .union([z.literal(''), z.null(), z.string().trim().max(1000, 'النص طويل جداً.')])
+  .optional()
+  .transform((v) => (v === undefined ? undefined : v === '' ? null : v))
+
+export const updateFieldTaskSchema = z.object({
+  taskName: z
+    .string()
+    .trim()
+    .min(1, 'اسم المهمة مطلوب.')
+    .max(200, 'اسم المهمة طويل جداً.')
+    .optional(),
+  notes: nullableTextSchema,
+  date: isoDateSchema.optional(),
+  officeId: z.union([z.number().int().positive(), z.null()]).optional().nullable(),
+  startLat: z.coerce.number().optional(),
+  startLng: z.coerce.number().optional(),
+  endLat: z.coerce.number().optional(),
+  endLng: z.coerce.number().optional(),
+  startTime: z.string().optional(),
+  endTime: z.string().nullable().optional(),
+  addressName: nullableTextSchema,
+  mapLink: z
+    .union([z.literal(''), z.null(), z.string().trim().max(500, 'رابط الخريطة طويل جداً.')])
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === '' ? null : v)),
+})
+
+export const endFieldTaskSchema = z.object({
+  lat: z.coerce.number().optional(),
+  lng: z.coerce.number().optional(),
+  notes: z.string().trim().max(1000, 'الملاحظات طويلة جداً.').optional(),
+  endTime: z.string().optional(),
+})
+
 export const attendanceTaskSchema = z.object({
   id: z.string(),
   taskName: z.string().optional(),
+  notes: z.string().nullable().optional(),
   lat: z.number().nullable().optional(),
   lng: z.number().nullable().optional(),
+  endLat: z.number().nullable().optional(),
+  endLng: z.number().nullable().optional(),
   addressName: z.string().nullable().optional(),
   mapLink: z.string().nullable().optional(),
   startedAt: z.string().nullable().optional(),
   endedAt: z.string().nullable().optional(),
   workDurationMinutes: z.number().nullable().optional(),
   userId: z.number().optional(),
+  officeId: z.number().nullable().optional(),
+  office: officeOptionSchema.nullable().optional(),
   attendanceId: z.string().nullable().optional(),
   date: z.string().optional(),
   user: z
@@ -281,6 +329,8 @@ export const userRecordSchema = z.object({
   department: departmentOptionSchema.nullable().optional(),
   officeId: z.number().nullable().optional(),
   office: officeOptionSchema.nullable().optional(),
+  officeIds: z.array(z.number()).optional(),
+  offices: z.array(officeOptionSchema).optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
 })
@@ -431,6 +481,8 @@ export type PaginatedOffices = z.infer<typeof paginatedOfficesSchema>
 export type ListAttendanceParams = z.infer<typeof listAttendanceParamsSchema>
 export type ListAttendanceUsersParams = z.infer<typeof listAttendanceUsersParamsSchema>
 export type ExportAttendanceExcelParams = z.infer<typeof exportAttendanceExcelParamsSchema>
+export type UpdateFieldTaskInput = z.infer<typeof updateFieldTaskSchema>
+export type EndFieldTaskInput = z.infer<typeof endFieldTaskSchema>
 export type AttendanceTask = z.infer<typeof attendanceTaskSchema>
 export type AttendanceRecord = z.infer<typeof attendanceRecordSchema>
 export type AttendanceUserItem = z.infer<typeof attendanceUserItemSchema>

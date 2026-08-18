@@ -149,3 +149,20 @@ export function formatDateTime12(value?: string | null): string {
     return value
   }
 }
+
+/** `YYYY-MM-DDTHH:mm` in local time, for `<input type="datetime-local">`. */
+export function toDateTimeLocalInput(value?: string | null): string {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return `${toIsoDate(date)}T${pad2(date.getHours())}:${pad2(date.getMinutes())}`
+}
+
+/** Convert a datetime-local value to an ISO string for the API. */
+export function fromDateTimeLocalInput(value: string): string | undefined {
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  const date = new Date(trimmed)
+  if (Number.isNaN(date.getTime())) return undefined
+  return date.toISOString()
+}

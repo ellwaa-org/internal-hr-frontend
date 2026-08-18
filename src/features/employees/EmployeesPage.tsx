@@ -18,6 +18,8 @@ import {
   listDepartmentOptions,
   listOfficeOptions,
   listUsers,
+  officeIdsOf,
+  officeNamesOf,
   registerUser,
   resetUserDevice,
   resetUserPassword,
@@ -393,9 +395,9 @@ function EmployeesPage({
                   <Td>
                     <div className="flex min-w-0 flex-col gap-0.5">
                       <span className="font-semibold text-foreground">{user.fullName}</span>
-                      {(user.department?.name || user.office?.name) && (
+                      {(user.department?.name || officeNamesOf(user)) && (
                         <span className="truncate text-xs text-muted">
-                          {[user.department?.name, user.office?.name].filter(Boolean).join(' · ')}
+                          {[user.department?.name, officeNamesOf(user)].filter(Boolean).join(' · ')}
                         </span>
                       )}
                     </div>
@@ -695,13 +697,11 @@ function EmployeeFormDialog({
         ? String(user.departmentId)
         : 'none',
   )
-  const [officeId, setOfficeId] = useState(
-    draft?.officeId != null
-      ? String(draft.officeId)
-      : user?.officeId != null
-        ? String(user.officeId)
-        : 'none',
-  )
+  const [selectedOfficeIds, setSelectedOfficeIds] = useState<string[]>(() => {
+    const fromDraft = draft?.officeIds
+    if (fromDraft) return fromDraft.map(String)
+    return officeIdsOf(user ?? {}).map(String)
+  })
   const [formError, setFormError] = useState<string | null>(null)
 
   const handleSubmit = async (event: FormEvent) => {
@@ -709,7 +709,9 @@ function EmployeeFormDialog({
     setFormError(null)
 
     const resolvedDepartmentId = departmentId === 'none' ? null : Number(departmentId)
-    const resolvedOfficeId = officeId === 'none' ? null : Number(officeId)
+    const resolvedOfficeIds = selectedOfficeIds
+      .map(Number)
+      .filter((id) => Number.isFinite(id) && id > 0)
 
     if (mode === 'create') {
       const parsed = registerUserSchema.safeParse({
@@ -720,7 +722,7 @@ function EmployeeFormDialog({
         role,
         email,
         departmentId: resolvedDepartmentId,
-        officeId: resolvedOfficeId,
+        officeIds: resolvedOfficeIds,
         bio,
       })
       if (!parsed.success) {
@@ -739,7 +741,7 @@ function EmployeeFormDialog({
       employeeCode,
       points: Number(points),
       departmentId: resolvedDepartmentId,
-      officeId: resolvedOfficeId,
+      officeIds: resolvedOfficeIds,
       isActive,
       bio,
     })
@@ -857,21 +859,40 @@ function EmployeeFormDialog({
             </Select>
           </div>
 
-          <div className="flex flex-col gap-1.5 text-[13px] text-muted">
-            <span>المكتب</span>
-            <Select value={officeId} onValueChange={setOfficeId}>
-              <SelectTrigger className="w-full" aria-label="المكتب">
-                <SelectValue placeholder="بدون مكتب" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">بدون مكتب</SelectItem>
-                {offices.map((o) => (
-                  <SelectItem key={o.id} value={String(o.id)}>
-                    {o.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="col-span-full flex flex-col gap-1.5 text-[13px] text-muted">
+            <span>المكاتب</span>
+            <p className="m-0 text-xs text-muted">يمكن تعيين الموظف لأكثر من مكتب في الوقت نفسه.</p>
+            <div className="grid max-h-[180px] grid-cols-2 gap-1.5 overflow-auto rounded-[10px] border border-border bg-white p-2.5 max-[720px]:grid-cols-1">
+              {offices.length === 0 ? (
+                <span className="col-span-full text-xs text-muted">لا توجد مكاتب بعد</span>
+              ) : (
+                offices.map((o) => {
+                  const value = String(o.id)
+                  const checked = selectedOfficeIds.includes(value)
+                  return (
+                    <label
+                      key={o.id}
+                      className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-sm text-foreground hover:bg-hover"
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(next) => {
+                          setSelectedOfficeIds((prev) =>
+                            next === true
+                              ? prev.includes(value)
+                                ? prev
+                                : [...prev, value]
+                              : prev.filter((id) => id !== value),
+                          )
+                        }}
+                        id={`employee-office-${o.id}`}
+                      />
+                      <span className="truncate">{o.name}</span>
+                    </label>
+                  )
+                })
+              )}
+            </div>
           </div>
 
           <label className="col-span-full flex flex-col gap-1.5 text-[13px] text-muted">

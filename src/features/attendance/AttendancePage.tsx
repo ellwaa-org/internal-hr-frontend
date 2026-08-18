@@ -6,6 +6,7 @@ import {
   listAttendanceUsers,
   listDepartmentOptions,
   listOfficeOptions,
+  officeNamesOf,
   reviewEarlyLeaveJustification,
   reviewLateJustification,
   type AttendanceRecord,
@@ -148,12 +149,8 @@ function buildRows(
   const rows: AttendanceRow[] = []
 
   for (const item of items) {
-    const officeId = item.user.officeId ?? null
     const departmentId = item.user.departmentId ?? null
-    const officeName =
-      item.user.office?.name ||
-      (officeId != null ? officesById.get(officeId)?.name : null) ||
-      null
+    const officeName = officeNamesOf(item.user, officesById) || null
     const departmentName =
       item.user.department?.name ||
       (departmentId != null ? departmentsById.get(departmentId)?.name : null) ||
