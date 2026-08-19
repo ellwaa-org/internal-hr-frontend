@@ -1044,16 +1044,13 @@ export function assignUserToOffice(
 export function unassignUserFromOffice(
   token: string,
   userId: number,
-  officeId?: number,
+  officeId: number,
 ): Promise<unknown> {
   return request(
     '/office/unassign',
     {
       method: 'POST',
-      body: JSON.stringify({
-        userId,
-        ...(officeId != null ? { officeId } : {}),
-      }),
+      body: JSON.stringify({ userId, officeId }),
     },
     token,
   )
