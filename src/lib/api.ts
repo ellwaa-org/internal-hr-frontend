@@ -301,12 +301,14 @@ function asUserRecord(raw: Record<string, unknown>): UserRecord {
   }
 }
 
-export function officeIdsOf(user: {
+type OfficeIdentity = {
   officeId?: number | null
   officeIds?: number[]
-  offices?: { id: number }[] | null
-  office?: { id: number } | null
-}): number[] {
+  offices?: { id: number; name?: string }[] | null
+  office?: { id?: number; name?: string } | null
+}
+
+export function officeIdsOf(user: OfficeIdentity): number[] {
   if (user.officeIds && user.officeIds.length > 0) {
     return [...new Set(user.officeIds)]
   }
@@ -319,12 +321,7 @@ export function officeIdsOf(user: {
 }
 
 export function officeNamesOf(
-  user: {
-    office?: { name?: string } | null
-    offices?: { id: number; name: string }[] | null
-    officeId?: number | null
-    officeIds?: number[]
-  },
+  user: OfficeIdentity,
   officesById?: Map<number, { name: string }>,
 ): string {
   if (user.offices && user.offices.length > 0) {
