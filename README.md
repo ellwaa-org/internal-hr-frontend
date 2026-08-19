@@ -14,6 +14,6 @@ npm install
 npm run dev
 ```
 
-Set `VITE_API_PROXY_TARGET` in `.env`. Requests to `/api` are proxied to that host.
+Set `API_PROXY_TARGET` in `.env` (server-side only). Requests to `/api` are proxied to that host.
 
 الدخول مسموح لرتبتي `ADMIN` و `HR` فقط.

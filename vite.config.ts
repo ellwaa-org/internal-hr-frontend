@@ -9,11 +9,13 @@ const rootDir = path.dirname(fileURLToPath(import.meta.url))
 // https://vite.dev/config/
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const apiTarget = env.VITE_API_PROXY_TARGET
+  // Server-side only. Prefer API_PROXY_TARGET so the host is not a VITE_ key
+  // (Vite would otherwise inline it into the browser bundle).
+  const apiTarget = env.API_PROXY_TARGET || env.VITE_API_PROXY_TARGET
 
   if (command === 'serve' && !apiTarget) {
     throw new Error(
-      'Missing VITE_API_PROXY_TARGET. Copy .env.example to .env and set the API host.',
+      'Missing API_PROXY_TARGET. Copy .env.example to .env and set the API host.',
     )
   }
 
