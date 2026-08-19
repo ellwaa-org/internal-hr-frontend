@@ -1,6 +1,7 @@
 # Sourced before envsubst. Never crash on missing/empty Coolify env.
 
 DEFAULT_PORT="3000"
+DEFAULT_API_PROXY_TARGET="https://hr-api-staging.ellwaa.com"
 
 if [ -z "${PORT:-}" ]; then
   PORT="${DEFAULT_PORT}"
@@ -17,9 +18,17 @@ case "${PORT}" in
     ;;
 esac
 
+# Prefer API_PROXY_TARGET (runtime). Accept VITE_API_PROXY_TARGET only as a
+# legacy alias — that name must not be used at Vite build time.
+if [ -z "${API_PROXY_TARGET:-}" ] && [ -n "${VITE_API_PROXY_TARGET:-}" ]; then
+  API_PROXY_TARGET="${VITE_API_PROXY_TARGET}"
+  export API_PROXY_TARGET
+fi
+
 if [ -z "${API_PROXY_TARGET:-}" ]; then
-  echo "ERROR: API_PROXY_TARGET is required. Set it from .env or the host environment."
-  exit 1
+  API_PROXY_TARGET="${DEFAULT_API_PROXY_TARGET}"
+  export API_PROXY_TARGET
+  echo "WARN: API_PROXY_TARGET empty — using ${API_PROXY_TARGET}"
 fi
 
 case "${API_PROXY_TARGET}" in
@@ -33,8 +42,9 @@ case "${API_PROXY_TARGET}" in
   http://*|https://*)
     ;;
   *)
-    echo "ERROR: API_PROXY_TARGET must be an http(s) URL. Got: ${API_PROXY_TARGET}"
-    exit 1
+    echo "WARN: API_PROXY_TARGET invalid (${API_PROXY_TARGET}) — using ${DEFAULT_API_PROXY_TARGET}"
+    API_PROXY_TARGET="${DEFAULT_API_PROXY_TARGET}"
+    export API_PROXY_TARGET
     ;;
 esac
 
