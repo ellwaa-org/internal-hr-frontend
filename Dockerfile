@@ -7,8 +7,9 @@
 #   Build Pack ........ Dockerfile
 #   Port Exposes ...... 3000
 #   Healthcheck Path .. /healthz
-#   Env (required) .... API_PROXY_TARGET  (from .env / Coolify)
-#   Env (optional) .... PORT=3000
+#   Env (runtime) ..... PORT=3000
+#                       API_PROXY_TARGET=https://hr-api-staging.ellwaa.com
+#   Do not set VITE_API_PROXY_TARGET (would leak the host into the JS bundle).
 #
 # Local:
 #   docker compose up --build
@@ -32,7 +33,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-ARG VITE_API_URL
+ARG VITE_API_URL=/api
 ENV VITE_API_URL=${VITE_API_URL}
 ENV NODE_ENV=production
 
@@ -49,8 +50,11 @@ RUN apk add --no-cache curl \
 # Substitute only these names in the nginx template (keep $uri / $host)
 ENV NGINX_ENVSUBST_FILTER=^(API_PROXY_TARGET|PORT)$
 
-# Coolify proxies to this port (same as your other apps)
+# Runtime defaults (Coolify Environment Variables override these).
+# API_PROXY_TARGET is a public origin, not a secret — needed so /healthz works
+# when Coolify has not injected env yet. Never use a VITE_ name here.
 ENV PORT=3000
+ENV API_PROXY_TARGET=https://hr-api-staging.ellwaa.com
 
 COPY docker/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY docker/18-validate-env.envsh /docker-entrypoint.d/18-validate-env.envsh
