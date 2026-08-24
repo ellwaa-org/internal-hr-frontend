@@ -115,6 +115,14 @@ export const changePasswordSchema = z
     path: ['newPassword'],
   })
 
+export const resetPasswordSchema = z.object({
+  userId: z.number().int().positive(),
+  newPassword: z
+    .string()
+    .min(4, 'كلمة المرور الجديدة يجب أن تكون 4 أحرف على الأقل.')
+    .max(100, 'كلمة المرور الجديدة طويلة جداً.'),
+})
+
 export const listUsersParamsSchema = z.object({
   page: z.number().int().positive().optional(),
   limit: z.number().int().positive().max(100).optional(),
@@ -462,6 +470,7 @@ export type LoginInput = z.infer<typeof loginSchema>
 export type RegisterUserInput = z.infer<typeof registerUserSchema>
 export type UpdateUserInput = z.infer<typeof updateUserSchema>
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>
 export type ListUsersParams = z.infer<typeof listUsersParamsSchema>
 export type UserRecord = z.infer<typeof userRecordSchema>
 export type PaginatedUsers = z.infer<typeof paginatedUsersSchema>
