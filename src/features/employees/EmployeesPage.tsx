@@ -36,6 +36,7 @@ import { isUnauthorizedError } from '@/lib/errors'
 import { queryKeys, QUERY_STALE_TIME_FREQUENT } from '@/lib/query-client'
 import {
   registerUserSchema,
+  resetPasswordSchema,
   updateUserSchema,
   zodErrorMessage,
 } from '@/lib/schemas'
@@ -92,20 +93,19 @@ type ModalMode =
   | { type: 'create' }
   | { type: 'update'; user: UserRecord; draft?: UpdatePayload }
   | { type: 'confirm-update'; user: UserRecord; update: UpdatePayload }
+  | { type: 'reset-password'; user: UserRecord }
   | { type: 'confirm'; action: ConfirmAction; user: UserRecord }
 
-type ConfirmAction = 'delete' | 'toggle' | 'reset-password' | 'reset-device'
+type ConfirmAction = 'delete' | 'toggle' | 'reset-device'
 
 const CONFIRM_SUCCESS: Record<Exclude<ConfirmAction, 'toggle'>, (name: string) => string> = {
   delete: (name) => `تم حذف ${name} بنجاح`,
-  'reset-password': (name) => `تمت إعادة تعيين كلمة مرور ${name}`,
   'reset-device': (name) => `تمت إعادة تعيين جهاز ${name}`,
 }
 
 const CONFIRM_LOADING: Record<ConfirmAction, string> = {
   delete: 'جارٍ حذف الموظف...',
   toggle: 'جارٍ تحديث الحالة...',
-  'reset-password': 'جارٍ إعادة تعيين كلمة المرور...',
   'reset-device': 'جارٍ إعادة تعيين الجهاز...',
 }
 
@@ -201,6 +201,7 @@ function EmployeesPage({
   const createDialog = useDialogState(modal?.type === 'create' ? modal : null)
   const updateDialog = useDialogState(modal?.type === 'update' ? modal : null)
   const confirmUpdateDialog = useDialogState(modal?.type === 'confirm-update' ? modal : null)
+  const resetPasswordDialog = useDialogState(modal?.type === 'reset-password' ? modal : null)
 
   const runConfirm = async (action: ConfirmAction, user: UserRecord) => {
     setBusy(true)
@@ -210,8 +211,6 @@ function EmployeesPage({
         await deleteUser(token, user.id)
       } else if (action === 'toggle') {
         await setUserStatus(token, user.id, !user.isActive)
-      } else if (action === 'reset-password') {
-        await resetUserPassword(token, user.id)
       } else {
         await resetUserDevice(token, user.id)
       }
@@ -229,6 +228,23 @@ function EmployeesPage({
     } catch (err) {
       notify.dismiss(toastId)
       handleApiError(err, 'تعذر تنفيذ العملية')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const runResetPassword = async (user: UserRecord, newPassword: string) => {
+    setBusy(true)
+    const toastId = notify.loading('جارٍ إعادة تعيين كلمة المرور...')
+    try {
+      await resetUserPassword(token, { userId: user.id, newPassword })
+      notify.dismiss(toastId)
+      notify.success(`تمت إعادة تعيين كلمة مرور ${user.fullName}`)
+      setModal(null)
+      await invalidateUsers()
+    } catch (err) {
+      notify.dismiss(toastId)
+      handleApiError(err, 'تعذر إعادة تعيين كلمة المرور')
     } finally {
       setBusy(false)
     }
@@ -456,9 +472,7 @@ function EmployeesPage({
                           {user.isActive ? 'إيقاف' : 'تفعيل'}
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onSelect={() =>
-                            setModal({ type: 'confirm', action: 'reset-password', user })
-                          }
+                          onSelect={() => setModal({ type: 'reset-password', user })}
                         >
                           <KeyRound />
                           إعادة تعيين كلمة المرور
@@ -498,7 +512,6 @@ function EmployeesPage({
                   {confirmDialog.data.action === 'delete' && 'تأكيد الحذف'}
                   {confirmDialog.data.action === 'toggle' &&
                     (confirmDialog.data.user.isActive ? 'تأكيد الإيقاف' : 'تأكيد التفعيل')}
-                  {confirmDialog.data.action === 'reset-password' && 'تأكيد إعادة تعيين كلمة المرور'}
                   {confirmDialog.data.action === 'reset-device' && 'تأكيد إعادة تعيين الجهاز'}
                 </DialogTitle>
                 <DialogDescription>
@@ -508,8 +521,6 @@ function EmployeesPage({
                     (confirmDialog.data.user.isActive
                       ? `سيتم إيقاف حساب ${confirmDialog.data.user.fullName} ولن يتمكن من تسجيل الدخول.`
                       : `سيتم تفعيل حساب ${confirmDialog.data.user.fullName}.`)}
-                  {confirmDialog.data.action === 'reset-password' &&
-                    `سيتم إعادة كلمة مرور ${confirmDialog.data.user.fullName} إلى القيمة الافتراضية.`}
                   {confirmDialog.data.action === 'reset-device' &&
                     `سيتم فك ربط الجهاز الحالي لـ ${confirmDialog.data.user.fullName} ليتمكن من الدخول من جهاز جديد.`}
                 </DialogDescription>
@@ -533,6 +544,23 @@ function EmployeesPage({
                 </Button>
               </DialogFooter>
             </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={resetPasswordDialog.open} onOpenChange={(open) => !open && closeModal()}>
+        <DialogContent>
+          {resetPasswordDialog.data ? (
+            <ResetPasswordDialog
+              user={resetPasswordDialog.data.user}
+              busy={busy}
+              onClose={closeModal}
+              onSubmit={(newPassword) => {
+                const data = resetPasswordDialog.data
+                if (!data) return
+                void runResetPassword(data.user, newPassword)
+              }}
+            />
           ) : null}
         </DialogContent>
       </Dialog>
@@ -651,6 +679,66 @@ function EmployeesPage({
 }
 
 type FormPayload = RegisterUserInput
+
+function ResetPasswordDialog({
+  user,
+  busy,
+  onClose,
+  onSubmit,
+}: {
+  user: UserRecord
+  busy: boolean
+  onClose: () => void
+  onSubmit: (newPassword: string) => void
+}) {
+  const [newPassword, setNewPassword] = useState('')
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    const parsed = resetPasswordSchema.safeParse({
+      userId: user.id,
+      newPassword,
+    })
+    if (!parsed.success) {
+      notify.error(zodErrorMessage(parsed.error))
+      return
+    }
+    onSubmit(parsed.data.newPassword)
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <DialogHeader>
+        <DialogTitle>إعادة تعيين كلمة المرور</DialogTitle>
+        <DialogDescription>
+          أدخل كلمة المرور الجديدة لـ {user.fullName}.
+        </DialogDescription>
+      </DialogHeader>
+      <DialogBody>
+        <label className="flex flex-col gap-1.5 text-[13px] text-muted">
+          <span>كلمة المرور الجديدة *</span>
+          <Input
+            type="text"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            disabled={busy}
+            autoFocus
+            placeholder="4 أحرف على الأقل"
+          />
+        </label>
+      </DialogBody>
+      <DialogFooter>
+        <Button type="button" disabled={busy} onClick={onClose} variant="secondary">
+          إلغاء
+        </Button>
+        <Button type="submit" disabled={busy || !newPassword.trim()} variant="primary">
+          {busy ? <Loader2 className="animate-spin" /> : <KeyRound />}
+          إعادة التعيين
+        </Button>
+      </DialogFooter>
+    </form>
+  )
+}
 
 function EmployeeFormDialog({
   mode,
