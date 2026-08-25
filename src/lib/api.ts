@@ -1033,6 +1033,10 @@ export function updateOffice(
   )
 }
 
+export function deleteOffice(token: string, id: number): Promise<unknown> {
+  return request(`/office/${id}`, { method: 'DELETE' }, token)
+}
+
 export function assignUserToOffice(
   token: string,
   officeId: number,
