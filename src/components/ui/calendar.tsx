@@ -36,7 +36,14 @@ function NavButton({
   )
 }
 
-export function Calendar({ className, showOutsideDays = true, style, ...props }: DayPickerProps) {
+export function Calendar({
+  className,
+  showOutsideDays = true,
+  style,
+  classNames,
+  components,
+  ...props
+}: DayPickerProps) {
   return (
     <DayPicker
       dir="rtl"
@@ -70,6 +77,7 @@ export function Calendar({ className, showOutsideDays = true, style, ...props }:
         outside: 'opacity-40',
         disabled: 'opacity-40',
         hidden: 'invisible',
+        ...classNames,
       }}
       components={{
         Chevron: ({ orientation }) =>
@@ -80,6 +88,7 @@ export function Calendar({ className, showOutsideDays = true, style, ...props }:
           ),
         PreviousMonthButton: (buttonProps) => <NavButton {...buttonProps} />,
         NextMonthButton: (buttonProps) => <NavButton {...buttonProps} />,
+        ...components,
       }}
       {...props}
     />

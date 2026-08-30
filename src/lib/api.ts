@@ -20,6 +20,7 @@ import {
   loginSchema,
   parseOrThrow,
   registerUserSchema,
+  resetPasswordSchema,
   updateDepartmentSchema,
   updateOfficeSchema,
   updateUserSchema,
@@ -53,6 +54,7 @@ import {
   type PaginatedUsers,
   type Profile,
   type RegisterUserInput,
+  type ResetPasswordInput,
   type Role,
   type UpdateDepartmentInput,
   type UpdateOfficeInput,
@@ -91,6 +93,7 @@ export type {
   PaginatedUsers,
   Profile,
   RegisterUserInput,
+  ResetPasswordInput,
   Role,
   UpdateDepartmentInput,
   UpdateOfficeInput,
@@ -818,12 +821,19 @@ export function deleteUser(token: string, id: number): Promise<unknown> {
   return request(`/auth/users/${id}`, { method: 'DELETE' }, token)
 }
 
-export function resetUserPassword(token: string, userId: number): Promise<unknown> {
+export function resetUserPassword(
+  token: string,
+  input: ResetPasswordInput,
+): Promise<unknown> {
+  const payload = parseOrThrow(resetPasswordSchema, input)
   return request(
     '/auth/reset-password',
     {
       method: 'POST',
-      body: JSON.stringify({ userId }),
+      body: JSON.stringify({
+        userId: payload.userId,
+        newPassword: payload.newPassword,
+      }),
     },
     token,
   )
@@ -1021,6 +1031,10 @@ export function updateOffice(
     },
     token,
   )
+}
+
+export function deleteOffice(token: string, id: number): Promise<unknown> {
+  return request(`/office/${id}`, { method: 'DELETE' }, token)
 }
 
 export function assignUserToOffice(

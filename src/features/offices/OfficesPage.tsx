@@ -7,12 +7,14 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
+  Trash2,
   UserMinus,
   UserPlus,
 } from 'lucide-react'
 import {
   assignUserToOffice,
   createOffice,
+  deleteOffice,
   listOfficeUsers,
   listOffices,
   listUsers,
@@ -76,6 +78,7 @@ type ModalMode =
   | { type: 'edit'; office: OfficeRecord }
   | { type: 'confirm-create'; payload: CreateOfficeInput }
   | { type: 'confirm-edit'; office: OfficeRecord; payload: UpdateOfficeInput }
+  | { type: 'delete'; office: OfficeRecord }
   | { type: 'members'; office: OfficeRecord }
   | {
       type: 'confirm-assign'
@@ -285,6 +288,7 @@ function OfficesPage({
   )
   const confirmCreateDialog = useDialogState(modal?.type === 'confirm-create' ? modal : null)
   const confirmEditDialog = useDialogState(modal?.type === 'confirm-edit' ? modal : null)
+  const deleteDialog = useDialogState(modal?.type === 'delete' ? modal : null)
   const membersDialog = useDialogState(modal?.type === 'members' ? modal : null)
   const confirmAssignDialog = useDialogState(modal?.type === 'confirm-assign' ? modal : null)
   const confirmUnassignDialog = useDialogState(modal?.type === 'confirm-unassign' ? modal : null)
@@ -360,6 +364,23 @@ function OfficesPage({
     } catch (err) {
       notify.dismiss(toastId)
       handleApiError(err, 'تعذر حفظ المكتب')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const runDelete = async (office: OfficeRecord) => {
+    setBusy(true)
+    const toastId = notify.loading('جارٍ حذف المكتب...')
+    try {
+      await deleteOffice(token, office.id)
+      notify.dismiss(toastId)
+      notify.success(`تم حذف ${office.name}`, 'تم فك تعيين الموظفين من هذا المكتب.')
+      setModal(null)
+      await invalidate()
+    } catch (err) {
+      notify.dismiss(toastId)
+      handleApiError(err, 'تعذر حذف المكتب')
     } finally {
       setBusy(false)
     }
@@ -641,6 +662,14 @@ function OfficesPage({
                             <UserPlus />
                             إدارة الموظفين
                           </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            variant="danger"
+                            onSelect={() => setModal({ type: 'delete', office })}
+                          >
+                            <Trash2 />
+                            حذف
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TdActions>
@@ -872,6 +901,40 @@ function OfficesPage({
                 >
                   {busy ? <Loader2 className="animate-spin" /> : <Pencil />}
                   تأكيد الحفظ
+                </Button>
+              </DialogFooter>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteDialog.open} onOpenChange={(open) => !open && closeModal()}>
+        <DialogContent>
+          {deleteDialog.data ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>تأكيد الحذف</DialogTitle>
+                <DialogDescription>
+                  هل أنت متأكد من حذف مكتب {deleteDialog.data.office.name}؟ سيتم فك تعيين جميع
+                  الموظفين منه، ولن يظهر المكتب في القوائم بعد ذلك.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button type="button" disabled={busy} onClick={closeModal} variant="secondary">
+                  إلغاء
+                </Button>
+                <Button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    const data = deleteDialog.data
+                    if (!data) return
+                    void runDelete(data.office)
+                  }}
+                  variant="danger"
+                >
+                  {busy ? <Loader2 className="animate-spin" /> : <Trash2 />}
+                  حذف
                 </Button>
               </DialogFooter>
             </>
