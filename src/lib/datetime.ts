@@ -101,6 +101,69 @@ export function startOfMonthIso(value: string): string {
   return toIsoDate(new Date(date.getFullYear(), date.getMonth(), 1))
 }
 
+/** Last day of the month for an ISO date as `YYYY-MM-DD`. */
+export function endOfMonthIso(value: string): string {
+  const date = parseIsoDate(value)
+  return toIsoDate(new Date(date.getFullYear(), date.getMonth() + 1, 0))
+}
+
+/** Payroll / attendance cycle starts and ends on this day of the month. */
+export const ATTENDANCE_CYCLE_DAY = 28
+
+function cycleDate(year: number, monthIndex: number): Date {
+  return new Date(year, monthIndex, ATTENDANCE_CYCLE_DAY)
+}
+
+/** Inclusive cycle covering `value`: 28th → next 28th. */
+export function cycleContainingIso(value: string): { from: string; to: string } {
+  const date = parseIsoDate(value)
+  const year = date.getFullYear()
+  const month = date.getMonth()
+  if (date.getDate() >= ATTENDANCE_CYCLE_DAY) {
+    return {
+      from: toIsoDate(cycleDate(year, month)),
+      to: toIsoDate(cycleDate(year, month + 1)),
+    }
+  }
+  return {
+    from: toIsoDate(cycleDate(year, month - 1)),
+    to: toIsoDate(cycleDate(year, month)),
+  }
+}
+
+/** Shift a cycle start ISO date by whole months, keeping day 28. */
+export function shiftCycleStartIso(from: string, months: number): string {
+  const date = parseIsoDate(from)
+  return toIsoDate(cycleDate(date.getFullYear(), date.getMonth() + months))
+}
+
+export function cycleEndIso(from: string): string {
+  const date = parseIsoDate(from)
+  return toIsoDate(cycleDate(date.getFullYear(), date.getMonth() + 1))
+}
+
+export function eachDayIso(from: string, to: string): string[] {
+  const days: string[] = []
+  let cursor = from
+  while (cursor <= to) {
+    days.push(cursor)
+    cursor = addDaysIso(cursor, 1)
+  }
+  return days
+}
+
+export function formatCycleRange(from: string, to: string): string {
+  const start = parseIsoDate(from)
+  const end = parseIsoDate(to)
+  const startPart = start.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long' })
+  const endPart = end.toLocaleDateString('ar-EG', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
+  return `${startPart} — ${endPart}`
+}
+
 /** Format a date-only or datetime value for Arabic UI with 12h صباحاً/مساءً time. */
 export function formatDate(value?: string | null): string {
   if (!value) return '—'
