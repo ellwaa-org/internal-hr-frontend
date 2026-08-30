@@ -1,6 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Download, Loader2, RefreshCw, X } from 'lucide-react'
+import { CalendarDays, Check, Download, Loader2, RefreshCw, X } from 'lucide-react'
 import {
   exportOfficeAttendanceExcel,
   listAttendanceUsers,
@@ -21,10 +21,22 @@ import { isUnauthorizedError } from '@/lib/errors'
 import { formatDate, formatTime12, startOfMonthIso, todayIsoDate } from '@/lib/datetime'
 import { queryKeys, QUERY_STALE_TIME_FREQUENT } from '@/lib/query-client'
 import { notify } from '@/lib/toast'
+import { useDialogState } from '@/lib/use-dialog-state'
 import { usePageParam } from '@/lib/use-page-param'
 import { Button } from '@/components/ui/button'
 import { DayPicker } from '@/components/ui/day-picker'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { ExcelExportDialog } from '@/components/ui/excel-export-dialog'
+import {
+  AttendanceCalendar,
+  type AttendanceCalendarUser,
+} from '@/features/attendance/AttendanceCalendar'
 import {
   FiltersBar,
   PageHeader,
@@ -247,6 +259,8 @@ function AttendancePage({
   const [busyId, setBusyId] = useState<string | null>(null)
   const [exportOpen, setExportOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [selectedUser, setSelectedUser] = useState<AttendanceCalendarUser | null>(null)
+  const calendarDialog = useDialogState(selectedUser)
 
   const handleApiError = useCallback(
     (err: unknown, fallback: string) => {
@@ -609,9 +623,28 @@ function AttendancePage({
                 return (
                   <Tr key={row.key}>
                     <Td className="min-w-[168px] max-w-[240px]">
-                      <span className="block truncate font-semibold text-foreground" title={row.employeeName}>
-                        {row.employeeName}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="block min-w-0 truncate font-semibold text-foreground" title={row.employeeName}>
+                          {row.employeeName}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 shrink-0 p-0"
+                          aria-label={`عرض تقويم ${row.employeeName}`}
+                          title="عرض التقويم"
+                          onClick={() =>
+                            setSelectedUser({
+                              id: row.userId,
+                              name: row.employeeName,
+                              employeeCode: row.employeeCode,
+                            })
+                          }
+                        >
+                          <CalendarDays />
+                        </Button>
+                      </div>
                     </Td>
                     <Td className="whitespace-nowrap text-muted">{formatDate(row.date)}</Td>
                     <Td>
@@ -767,6 +800,34 @@ function AttendancePage({
           </tbody>
         </Table>
       </TableSection>
+
+      <Dialog
+        open={calendarDialog.open}
+        onOpenChange={(open) => {
+          if (!open) setSelectedUser(null)
+        }}
+      >
+        <DialogContent size="sm">
+          {calendarDialog.data ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>{calendarDialog.data.name}</DialogTitle>
+                <DialogDescription>
+                  {calendarDialog.data.employeeCode
+                    ? `تقويم الحضور · ${calendarDialog.data.employeeCode}`
+                    : 'تقويم الحضور والانصراف خلال الشهر'}
+                </DialogDescription>
+              </DialogHeader>
+              <AttendanceCalendar
+                key={calendarDialog.data.id}
+                token={token}
+                user={calendarDialog.data}
+                initialDate={from}
+              />
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </PageShell>
   )
 }
