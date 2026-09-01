@@ -465,6 +465,29 @@ export const profileSchema = userRecordSchema.omit({
   updatedAt: true,
 })
 
+export const securityLogAttemptSchema = z.object({
+  device: z.string().nullable().optional(),
+  time: z.string().optional(),
+  ip: z.string().nullable().optional(),
+  reason: z.string().nullable().optional(),
+  action: z.string().nullable().optional(),
+  type: z.string().nullable().optional(),
+  officeId: z.number().nullable().optional(),
+  lat: z.number().nullable().optional(),
+  lng: z.number().nullable().optional(),
+  ssid: z.string().nullable().optional(),
+})
+
+export const deviceSecurityLogSchema = z.object({
+  userId: z.number(),
+  fullName: z.string(),
+  employeeCode: z.string(),
+  bindingDevice: z.string().nullable().optional(),
+  attempts: z.array(securityLogAttemptSchema),
+})
+
+export const attendanceSecurityLogSchema = deviceSecurityLogSchema
+
 export type Role = z.infer<typeof roleSchema>
 export type LoginInput = z.infer<typeof loginSchema>
 export type RegisterUserInput = z.infer<typeof registerUserSchema>
@@ -501,6 +524,9 @@ export type DayStatus = z.infer<typeof dayStatusSchema>
 export type JustificationStatus = z.infer<typeof justificationStatusSchema>
 export type AttendanceType = z.infer<typeof attendanceTypeSchema>
 export type AttendanceUserStatus = z.infer<typeof attendanceUserStatusSchema>
+export type SecurityLogAttempt = z.infer<typeof securityLogAttemptSchema>
+export type DeviceSecurityLog = z.infer<typeof deviceSecurityLogSchema>
+export type AttendanceSecurityLog = z.infer<typeof attendanceSecurityLogSchema>
 
 /** Collect first Zod issue messages as Arabic-friendly list. */
 export function zodErrorMessage(error: z.ZodError): string {
