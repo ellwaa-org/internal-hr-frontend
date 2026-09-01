@@ -64,3 +64,8 @@ export function isUnauthorizedError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err)
   return /401|unauthorized|غير مصرح|انتهت الجلسة/i.test(msg)
 }
+
+export function isNotFoundError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err)
+  return /404|not found|العنصر المطلوب غير موجود|المستخدم غير موجود/i.test(msg)
+}

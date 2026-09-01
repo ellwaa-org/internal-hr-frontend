@@ -9,6 +9,7 @@ import {
   Power,
   RefreshCw,
   RotateCcw,
+  ShieldAlert,
   Smartphone,
   Trash2,
   UserPlus,
@@ -79,6 +80,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { SecurityLogsDialog } from '@/features/employees/SecurityLogsDialog'
 
 const ROLE_LABELS: Record<Role, string> = {
   ADMIN: 'مدير النظام',
@@ -94,6 +96,7 @@ type ModalMode =
   | { type: 'update'; user: UserRecord; draft?: UpdatePayload }
   | { type: 'confirm-update'; user: UserRecord; update: UpdatePayload }
   | { type: 'reset-password'; user: UserRecord }
+  | { type: 'security-logs'; user: UserRecord }
   | { type: 'confirm'; action: ConfirmAction; user: UserRecord }
 
 type ConfirmAction = 'delete' | 'toggle' | 'reset-device'
@@ -202,6 +205,7 @@ function EmployeesPage({
   const updateDialog = useDialogState(modal?.type === 'update' ? modal : null)
   const confirmUpdateDialog = useDialogState(modal?.type === 'confirm-update' ? modal : null)
   const resetPasswordDialog = useDialogState(modal?.type === 'reset-password' ? modal : null)
+  const securityLogsDialog = useDialogState(modal?.type === 'security-logs' ? modal : null)
 
   const runConfirm = async (action: ConfirmAction, user: UserRecord) => {
     setBusy(true)
@@ -485,6 +489,12 @@ function EmployeesPage({
                           <Smartphone />
                           إعادة تعيين الجهاز
                         </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onSelect={() => setModal({ type: 'security-logs', user })}
+                        >
+                          <ShieldAlert />
+                          سجلات الأمان
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           variant="danger"
@@ -560,6 +570,20 @@ function EmployeesPage({
                 if (!data) return
                 void runResetPassword(data.user, newPassword)
               }}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={securityLogsDialog.open} onOpenChange={(open) => !open && closeModal()}>
+        <DialogContent size="lg">
+          {securityLogsDialog.data ? (
+            <SecurityLogsDialog
+              token={token}
+              user={securityLogsDialog.data.user}
+              offices={offices}
+              onClose={closeModal}
+              onUnauthorized={onUnauthorized}
             />
           ) : null}
         </DialogContent>
