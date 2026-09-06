@@ -87,4 +87,10 @@ export const queryKeys = {
   profile: {
     me: ['profile', 'me'] as const,
   },
+  securityLogs: {
+    all: ['security-logs'] as const,
+    devices: (userId: number) => [...queryKeys.securityLogs.all, 'devices', userId] as const,
+    attendance: (userId: number) =>
+      [...queryKeys.securityLogs.all, 'attendance', userId] as const,
+  },
 }

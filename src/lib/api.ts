@@ -6,7 +6,7 @@ const API_BASE = ((import.meta.env.VITE_API_URL as string | undefined) ?? '/api'
 const TOKEN_KEY = 'hr_access_token'
 const DEVICE_KEY = 'hr_device_id'
 
-import { translateErrorMessage } from './errors'
+import { isNotFoundError, translateErrorMessage } from './errors'
 import {
   changePasswordSchema,
   createDepartmentSchema,
@@ -27,11 +27,13 @@ import {
   updateFieldTaskSchema,
   endFieldTaskSchema,
   type AttendanceRecord,
+  type AttendanceSecurityLog,
   type AttendanceTask,
   type AttendanceType,
   type AttendanceUserItem,
   type AttendanceUserStatus,
   type ChangePasswordInput,
+  type DeviceSecurityLog,
   type CreateDepartmentInput,
   type CreateOfficeInput,
   type DayStatus,
@@ -56,6 +58,7 @@ import {
   type RegisterUserInput,
   type ResetPasswordInput,
   type Role,
+  type SecurityLogAttempt,
   type UpdateDepartmentInput,
   type UpdateOfficeInput,
   type UpdateUserInput,
@@ -66,10 +69,12 @@ import {
 
 export type {
   AttendanceRecord,
+  AttendanceSecurityLog,
   AttendanceTask,
   AttendanceType,
   AttendanceUserItem,
   AttendanceUserStatus,
+  DeviceSecurityLog,
   ChangePasswordInput,
   CreateDepartmentInput,
   CreateOfficeInput,
@@ -95,6 +100,7 @@ export type {
   RegisterUserInput,
   ResetPasswordInput,
   Role,
+  SecurityLogAttempt,
   UpdateDepartmentInput,
   UpdateOfficeInput,
   UpdateUserInput,
@@ -1380,5 +1386,128 @@ export function reviewEarlyLeaveJustification(
     },
     token,
   )
+}
+
+type SecurityLogFallback = {
+  id: number
+  fullName: string
+  employeeCode: string
+  deviceId?: string | null
+}
+
+function asRecordList(value: unknown): Record<string, unknown>[] {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+  }
+  const record = asRecord(value)
+  if (!record) return []
+  for (const key of ['data', 'items', 'results', 'logs', 'users']) {
+    if (Array.isArray(record[key])) return asRecordList(record[key])
+    const nested = asRecord(record[key])
+    if (
+      nested &&
+      (nested.attempts != null ||
+        nested.userId != null ||
+        nested.fullName != null ||
+        nested['binding-device'] != null)
+    ) {
+      return asRecordList(nested)
+    }
+  }
+  return [record]
+}
+
+function pickSecurityLogRecord(
+  body: unknown,
+  userId: number,
+): Record<string, unknown> | null {
+  const list = asRecordList(body)
+  return (
+    list.find((item) => pickNumber(item.userId, asRecord(item.user)?.id) === userId) ??
+    list[0] ??
+    null
+  )
+}
+
+function asSecurityLogAttempt(raw: Record<string, unknown>): SecurityLogAttempt {
+  return {
+    device: pickString(raw.device, raw.deviceId, raw.attemptedDevice, raw['attempted-device']),
+    time: pickString(raw.time, raw.createdAt, raw.attemptedAt, raw.occurredAt) ?? undefined,
+    ip: pickString(raw.ip, raw.ipAddress, raw.clientIp),
+    reason: pickString(raw.reason, raw.message, raw.details),
+    action: pickString(raw.action, raw.attendanceAction),
+    type: pickString(raw.type, raw.violationType, raw['violation-type']),
+    officeId: pickNumber(raw.officeId, raw.office_id, asRecord(raw.office)?.id),
+    lat: pickNumber(raw.lat, raw.latitude),
+    lng: pickNumber(raw.lng, raw.longitude),
+    ssid: pickString(raw.ssid, raw.wifiSsid, raw.wifi_ssid),
+  }
+}
+
+function asAttempts(raw: Record<string, unknown>): SecurityLogAttempt[] {
+  const source = raw.attempts ?? raw.logs ?? raw.items ?? raw.violations
+  const list = Array.isArray(source) ? source : []
+  return list
+    .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+    .map(asSecurityLogAttempt)
+    .sort((a, b) => {
+      const aTime = a.time ? new Date(a.time).getTime() : 0
+      const bTime = b.time ? new Date(b.time).getTime() : 0
+      return bTime - aTime
+    })
+}
+
+function asSecurityLog(
+  raw: Record<string, unknown> | null,
+  fallback: SecurityLogFallback,
+): DeviceSecurityLog {
+  const userRaw = raw ? asRecord(raw.user) : null
+  return {
+    userId: pickNumber(raw?.userId, userRaw?.id) ?? fallback.id,
+    fullName:
+      pickString(raw?.fullName, raw?.name, userRaw?.fullName, userRaw?.name) ?? fallback.fullName,
+    employeeCode:
+      pickString(raw?.employeeCode, raw?.code, userRaw?.employeeCode, userRaw?.code) ??
+      fallback.employeeCode,
+    bindingDevice:
+      pickString(
+        raw?.['binding-device'],
+        raw?.bindingDevice,
+        raw?.boundDevice,
+        raw?.deviceId,
+        userRaw?.deviceId,
+      ) ??
+      fallback.deviceId ??
+      null,
+    attempts: raw ? asAttempts(raw) : [],
+  }
+}
+
+async function fetchUserSecurityLog(
+  token: string,
+  path: string,
+  fallback: SecurityLogFallback,
+): Promise<DeviceSecurityLog> {
+  try {
+    const body = await request<unknown>(path, {}, token)
+    return asSecurityLog(pickSecurityLogRecord(body, fallback.id), fallback)
+  } catch (err) {
+    if (isNotFoundError(err)) return asSecurityLog(null, fallback)
+    throw err
+  }
+}
+
+export function getUserDeviceSecurityLogs(
+  token: string,
+  user: SecurityLogFallback,
+): Promise<DeviceSecurityLog> {
+  return fetchUserSecurityLog(token, `/security-logs/devices/${user.id}`, user)
+}
+
+export function getUserAttendanceSecurityLogs(
+  token: string,
+  user: SecurityLogFallback,
+): Promise<AttendanceSecurityLog> {
+  return fetchUserSecurityLog(token, `/security-logs/attendance/${user.id}`, user)
 }
 
