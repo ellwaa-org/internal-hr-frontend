@@ -31,6 +31,10 @@ const MESSAGE_MAP: Array<[RegExp, string]> = [
   [/network|failed to fetch|fetch failed/i, 'تعذر الاتصال بالخادم. تحقق من الشبكة.'],
   [/request failed/i, 'تعذر إتمام الطلب. حاول مرة أخرى.'],
   [/login response did not include/i, 'لم يتم استلام رمز الدخول من الخادم.'],
+  [/sso not configured|oidc not configured|sso is not configured/i, 'تسجيل الدخول عبر SSO غير مُعد على الخادم.'],
+  [/already used|(?:authorization )?code.*(?:used|expired)|state.*(?:used|expired)/i, 'انتهت صلاحية جلسة SSO. ابدأ تسجيل الدخول عبر SSO من جديد.'],
+  [/returnto|not allowlisted|return url not/i, 'عنوان العودة غير مسموح به. تواصل مع المسؤول.'],
+  [/sso failed|access_denied|user cancelled|user canceled|login cancelled|login canceled/i, 'تم إلغاء تسجيل الدخول عبر SSO أو فشل.'],
 ]
 
 export function translateErrorMessage(message: string, status?: number): string {
