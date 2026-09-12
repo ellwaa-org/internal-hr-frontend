@@ -1,16 +1,42 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 import logo from '@/assets/logo.webp'
-import { getDeviceId, login, setToken } from '@/lib/api'
+import { beginSsoLogin, getDeviceId, isSsoAvailable, login, setToken } from '@/lib/api'
+import { errorMessageFromUnknown } from '@/lib/errors'
 import { loginSchema, zodErrorMessage } from '@/lib/schemas'
 import { notify } from '@/lib/toast'
 
-function LoginPage({ onLogin }: { onLogin: (token: string) => void }) {
+function LoginPage({
+  onLogin,
+  ssoError,
+}: {
+  onLogin: (token: string) => void
+  ssoError?: string | null
+}) {
   const [employeeCode, setEmployeeCode] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [fieldError, setFieldError] = useState<string | null>(null)
+  const [fieldError, setFieldError] = useState<string | null>(ssoError ?? null)
   const [loading, setLoading] = useState(false)
+  const [ssoLoading, setSsoLoading] = useState(false)
+  const [ssoAvailable, setSsoAvailable] = useState(true)
+  const busy = loading || ssoLoading
+
+  useEffect(() => {
+    let cancelled = false
+    void isSsoAvailable().then((available) => {
+      if (!cancelled) setSsoAvailable(available)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!ssoError) return
+    setFieldError(ssoError)
+    notify.error(ssoError)
+  }, [ssoError])
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -41,6 +67,19 @@ function LoginPage({ onLogin }: { onLogin: (token: string) => void }) {
       notify.error(err, 'فشل تسجيل الدخول. تحقق من كود الموظف وكلمة المرور.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleSso = async () => {
+    setFieldError(null)
+    setSsoLoading(true)
+    try {
+      await beginSsoLogin()
+    } catch (err) {
+      const msg = errorMessageFromUnknown(err, 'فشل تسجيل الدخول عبر SSO.')
+      setFieldError(msg)
+      notify.error(msg)
+      setSsoLoading(false)
     }
   }
 
@@ -105,10 +144,28 @@ function LoginPage({ onLogin }: { onLogin: (token: string) => void }) {
         <button
           type="submit"
           className="mt-2 w-full cursor-pointer rounded-lg border-none bg-black px-4 py-[13px] text-base font-semibold text-white transition-[background,transform] hover:bg-neutral-800 active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:cursor-not-allowed disabled:opacity-70"
-          disabled={loading}
+          disabled={busy}
         >
           {loading ? 'جارٍ تسجيل الدخول...' : 'تسجيل الدخول'}
         </button>
+
+        {ssoAvailable && (
+          <>
+            <div className="flex w-full items-center gap-3">
+              <div className="h-px flex-1 bg-border" />
+              <span className="text-xs text-muted">أو</span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+            <button
+              type="button"
+              className="w-full cursor-pointer rounded-lg border border-neutral-300 bg-white px-4 py-[13px] text-base font-semibold text-foreground transition-[background,transform] hover:bg-neutral-50 active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:cursor-not-allowed disabled:opacity-70"
+              disabled={busy}
+              onClick={() => void handleSso()}
+            >
+              {ssoLoading ? 'جارٍ التحويل إلى SSO...' : 'تسجيل الدخول عبر SSO'}
+            </button>
+          </>
+        )}
       </form>
     </div>
   )

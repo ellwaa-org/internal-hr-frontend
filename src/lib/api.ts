@@ -130,6 +130,57 @@ export function getDeviceId(): string {
   return id
 }
 
+export function getSsoReturnTo(): string {
+  return `${window.location.origin}/auth/sso`
+}
+
+export function getSsoStartUrl(): string {
+  const qs = new URLSearchParams({
+    redirect: 'true',
+    returnTo: getSsoReturnTo(),
+  })
+  return `${API_BASE}/auth/sso?${qs.toString()}`
+}
+
+export async function beginSsoLogin(): Promise<void> {
+  const probeQs = new URLSearchParams({ returnTo: getSsoReturnTo() })
+  const res = await fetch(`${API_BASE}/auth/sso?${probeQs}`, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+    redirect: 'manual',
+  })
+
+  if (res.status === 503) {
+    throw new Error(translateErrorMessage('SSO is not configured', 503))
+  }
+  if (res.status >= 400) {
+    let message = translateErrorMessage(`Request failed (${res.status})`, res.status)
+    try {
+      message = errorMessageFromBody(await res.json(), message, res.status)
+    } catch {
+      if (res.status === 400) {
+        message = translateErrorMessage('returnTo is not allowlisted', 400)
+      }
+    }
+    throw new Error(message)
+  }
+
+  window.location.assign(getSsoStartUrl())
+}
+
+export async function isSsoAvailable(): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/auth/sso`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      redirect: 'manual',
+    })
+    return res.status !== 503
+  } catch {
+    return true
+  }
+}
+
 function errorMessageFromBody(body: unknown, fallback: string, status?: number): string {
   if (!body || typeof body !== 'object') return translateErrorMessage(fallback, status)
   const record = body as { message?: unknown; error?: unknown }
