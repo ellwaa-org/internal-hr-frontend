@@ -1,7 +1,6 @@
 # Sourced before envsubst. Never crash on missing/empty Coolify env.
 
 DEFAULT_PORT="3000"
-DEFAULT_API_PROXY_TARGET="https://hr-api-staging.ellwaa.com"
 
 if [ -z "${PORT:-}" ]; then
   PORT="${DEFAULT_PORT}"
@@ -18,35 +17,4 @@ case "${PORT}" in
     ;;
 esac
 
-# Prefer API_PROXY_TARGET (runtime). Accept VITE_API_PROXY_TARGET only as a
-# legacy alias — that name must not be used at Vite build time.
-if [ -z "${API_PROXY_TARGET:-}" ] && [ -n "${VITE_API_PROXY_TARGET:-}" ]; then
-  API_PROXY_TARGET="${VITE_API_PROXY_TARGET}"
-  export API_PROXY_TARGET
-fi
-
-if [ -z "${API_PROXY_TARGET:-}" ]; then
-  API_PROXY_TARGET="${DEFAULT_API_PROXY_TARGET}"
-  export API_PROXY_TARGET
-  echo "WARN: API_PROXY_TARGET empty — using ${API_PROXY_TARGET}"
-fi
-
-case "${API_PROXY_TARGET}" in
-  */)
-    API_PROXY_TARGET="${API_PROXY_TARGET%/}"
-    export API_PROXY_TARGET
-    ;;
-esac
-
-case "${API_PROXY_TARGET}" in
-  http://*|https://*)
-    ;;
-  *)
-    echo "WARN: API_PROXY_TARGET invalid (${API_PROXY_TARGET}) — using ${DEFAULT_API_PROXY_TARGET}"
-    API_PROXY_TARGET="${DEFAULT_API_PROXY_TARGET}"
-    export API_PROXY_TARGET
-    ;;
-esac
-
 echo "Listening on port: ${PORT}"
-echo "API proxy target: ${API_PROXY_TARGET}"
