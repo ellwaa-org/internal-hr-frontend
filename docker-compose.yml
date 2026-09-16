@@ -12,7 +12,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: ${VITE_API_URL:-https://hr-api.ellwaa.com}
+        VITE_API_URL: ${VITE_API_URL:-https://hr-api.ellwaa.com/api}
     image: internal-hr:${IMAGE_TAG:-local}
     ports:
       - "${APP_PORT:-3000}:3000"

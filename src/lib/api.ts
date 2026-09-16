@@ -2,7 +2,7 @@
 // behind the Vite proxy.
 const API_BASE = (
   (import.meta.env.VITE_API_URL as string | undefined) ??
-  'https://hr-api.ellwaa.com'
+  'https://hr-api.ellwaa.com/api'
 ).replace(/\/$/, '')
 
 const TOKEN_KEY = 'hr_access_token'

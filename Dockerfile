@@ -7,7 +7,7 @@
 #   Build Pack ........ Dockerfile
 #   Port Exposes ...... 3000
 #   Healthcheck Path .. /healthz
-#   Env (build) ........ VITE_API_URL=https://hr-api.ellwaa.com (Buildtime)
+#   Env (build) ........ VITE_API_URL=https://hr-api.ellwaa.com/api (Buildtime)
 #   Env (runtime) ...... PORT=3000
 #   The browser calls the API directly (CORS). No server-side proxy.
 #
@@ -33,7 +33,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-ARG VITE_API_URL=https://hr-api.ellwaa.com
+ARG VITE_API_URL=https://hr-api.ellwaa.com/api
 ENV VITE_API_URL=${VITE_API_URL}
 ENV NODE_ENV=production
 
