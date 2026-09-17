@@ -6,7 +6,6 @@ services:
     image: internal-hr:${IMAGE_TAG:-latest}
     environment:
       PORT: ${PORT:-3000}
-      API_PROXY_TARGET: ${API_PROXY_TARGET:-https://hr-api-staging.ellwaa.com}
     ports:
       - "${APP_PORT:-3000}:3000"
     restart: always

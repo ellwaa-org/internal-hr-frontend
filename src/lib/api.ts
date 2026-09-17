@@ -1,7 +1,9 @@
-const API_BASE = ((import.meta.env.VITE_API_URL as string | undefined) ?? '/api').replace(
-  /\/$/,
-  '',
-)
+// Direct API origin (CORS). Override with VITE_API_URL=/api for local dev
+// behind the Vite proxy.
+const API_BASE = (
+  (import.meta.env.VITE_API_URL as string | undefined) ??
+  'https://hr-api.ellwaa.com/api'
+).replace(/\/$/, '')
 
 const TOKEN_KEY = 'hr_access_token'
 const DEVICE_KEY = 'hr_device_id'
