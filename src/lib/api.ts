@@ -880,6 +880,14 @@ export function deleteUser(token: string, id: number): Promise<unknown> {
   return request(`/auth/users/${id}`, { method: 'DELETE' }, token)
 }
 
+export function restoreUser(token: string, employeeCode: string): Promise<unknown> {
+  return request(
+    `/auth/users/${encodeURIComponent(employeeCode)}/restore`,
+    { method: 'POST' },
+    token,
+  )
+}
+
 export function resetUserPassword(
   token: string,
   input: ResetPasswordInput,
