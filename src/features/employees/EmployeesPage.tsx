@@ -879,7 +879,7 @@ function EmployeeFormDialog({
   onSubmit?: (payload: FormPayload) => Promise<void>
   onRequestConfirm?: (update: UpdatePayload) => void
 }) {
-  const [fullName, setFullName] = useState(user?.fullName ?? '')
+  const [fullName, setFullName] = useState(draft?.fullName ?? user?.fullName ?? '')
   const [employeeCode, setEmployeeCode] = useState(
     draft?.employeeCode ?? user?.employeeCode ?? '',
   )
@@ -942,6 +942,7 @@ function EmployeeFormDialog({
     }
 
     const parsed = updateUserSchema.safeParse({
+      fullName,
       phoneNumber,
       email,
       employeeCode,
@@ -1028,6 +1029,10 @@ function EmployeeFormDialog({
 
           {mode === 'update' && (
             <>
+              <label className="col-span-full flex flex-col gap-1.5 text-[13px] text-muted">
+                <span>الاسم الكامل *</span>
+                <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
+              </label>
               <label className="flex flex-col gap-1.5 text-[13px] text-muted">
                 <span>النقاط</span>
                 <Input
