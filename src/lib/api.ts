@@ -1,7 +1,9 @@
-const API_BASE = ((import.meta.env.VITE_API_URL as string | undefined) ?? '/api').replace(
-  /\/$/,
-  '',
-)
+// Direct API origin (CORS). Override with VITE_API_URL=/api for local dev
+// behind the Vite proxy.
+const API_BASE = (
+  (import.meta.env.VITE_API_URL as string | undefined) ??
+  'https://hr-api.ellwaa.com/api'
+).replace(/\/$/, '')
 
 const TOKEN_KEY = 'hr_access_token'
 const DEVICE_KEY = 'hr_device_id'
@@ -876,6 +878,14 @@ export function setUserStatus(
 
 export function deleteUser(token: string, id: number): Promise<unknown> {
   return request(`/auth/users/${id}`, { method: 'DELETE' }, token)
+}
+
+export function restoreUser(token: string, employeeCode: string): Promise<unknown> {
+  return request(
+    `/auth/users/${encodeURIComponent(employeeCode)}/restore`,
+    { method: 'POST' },
+    token,
+  )
 }
 
 export function resetUserPassword(

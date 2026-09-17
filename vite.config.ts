@@ -7,17 +7,11 @@ import tailwindcss from '@tailwindcss/vite'
 const rootDir = path.dirname(fileURLToPath(import.meta.url))
 
 // https://vite.dev/config/
-export default defineConfig(({ command, mode }) => {
+export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  // Server-side only. Prefer API_PROXY_TARGET so the host is not a VITE_ key
-  // (Vite would otherwise inline it into the browser bundle).
-  const apiTarget = env.API_PROXY_TARGET || env.VITE_API_PROXY_TARGET
-
-  if (command === 'serve' && !apiTarget) {
-    throw new Error(
-      'Missing API_PROXY_TARGET. Copy .env.example to .env and set the API host.',
-    )
-  }
+  // Local dev proxy only (avoids CORS on localhost). Production calls the
+  // API directly via VITE_API_URL — no server-side proxy anymore.
+  const apiTarget = env.API_PROXY_TARGET || 'https://hr-api.ellwaa.com'
 
   const proxy = apiTarget
     ? {

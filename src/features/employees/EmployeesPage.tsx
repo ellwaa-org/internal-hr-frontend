@@ -8,6 +8,7 @@ import {
   Plus,
   Power,
   RefreshCw,
+  ArchiveRestore,
   RotateCcw,
   ShieldAlert,
   Smartphone,
@@ -23,6 +24,7 @@ import {
   officeNamesOf,
   registerUser,
   resetUserDevice,
+  restoreUser,
   resetUserPassword,
   setUserStatus,
   updateUser,
@@ -97,6 +99,7 @@ type ModalMode =
   | { type: 'confirm-update'; user: UserRecord; update: UpdatePayload }
   | { type: 'reset-password'; user: UserRecord }
   | { type: 'security-logs'; user: UserRecord }
+  | { type: 'restore' }
   | { type: 'confirm'; action: ConfirmAction; user: UserRecord }
 
 type ConfirmAction = 'delete' | 'toggle' | 'reset-device'
@@ -206,6 +209,24 @@ function EmployeesPage({
   const confirmUpdateDialog = useDialogState(modal?.type === 'confirm-update' ? modal : null)
   const resetPasswordDialog = useDialogState(modal?.type === 'reset-password' ? modal : null)
   const securityLogsDialog = useDialogState(modal?.type === 'security-logs' ? modal : null)
+  const restoreDialog = useDialogState(modal?.type === 'restore' ? modal : null)
+
+  const runRestore = async (employeeCode: string) => {
+    setBusy(true)
+    const toastId = notify.loading('جارٍ استعادة الموظف...')
+    try {
+      await restoreUser(token, employeeCode)
+      notify.dismiss(toastId)
+      notify.success(`تمت استعادة الموظف ${employeeCode}`, 'أصبح الحساب نشطاً في النظام الآن.')
+      setModal(null)
+      await invalidateUsers()
+    } catch (err) {
+      notify.dismiss(toastId)
+      handleApiError(err, 'تعذر استعادة الموظف')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const runConfirm = async (action: ConfirmAction, user: UserRecord) => {
     setBusy(true)
@@ -284,10 +305,21 @@ function EmployeesPage({
         title="الموظفون"
         subtitle="إدارة حسابات الموظفين والصلاحيات"
         action={
-          <Button type="button" onClick={() => setModal({ type: 'create' })} variant="primary" fullOnMobile>
-            <Plus />
-            إضافة موظف
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              onClick={() => setModal({ type: 'restore' })}
+              variant="secondary"
+              fullOnMobile
+            >
+              <ArchiveRestore />
+              استعادة موظف محذوف
+            </Button>
+            <Button type="button" onClick={() => setModal({ type: 'create' })} variant="primary" fullOnMobile>
+              <Plus />
+              إضافة موظف
+            </Button>
+          </div>
         }
       />
 
@@ -589,6 +621,14 @@ function EmployeesPage({
         </DialogContent>
       </Dialog>
 
+      <Dialog open={restoreDialog.open} onOpenChange={(open) => !open && closeModal()}>
+        <DialogContent>
+          {restoreDialog.data ? (
+            <RestoreUserDialog busy={busy} onClose={closeModal} onSubmit={(code) => void runRestore(code)} />
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={createDialog.open} onOpenChange={(open) => !open && closeModal()}>
         <DialogContent size="md">
           {createDialog.data ? (
@@ -703,6 +743,60 @@ function EmployeesPage({
 }
 
 type FormPayload = RegisterUserInput
+
+function RestoreUserDialog({
+  busy,
+  onClose,
+  onSubmit,
+}: {
+  busy: boolean
+  onClose: () => void
+  onSubmit: (employeeCode: string) => void
+}) {
+  const [employeeCode, setEmployeeCode] = useState('')
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    const code = employeeCode.trim()
+    if (!code) {
+      notify.error('يرجى إدخال كود الموظف')
+      return
+    }
+    onSubmit(code)
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <DialogHeader>
+        <DialogTitle>استعادة موظف محذوف</DialogTitle>
+        <DialogDescription>
+          أدخل كود الموظف المحذوف لاستعادة حسابه. لا يمكن استعادة الحسابات غير المحذوفة.
+        </DialogDescription>
+      </DialogHeader>
+      <DialogBody>
+        <label className="flex flex-col gap-1.5 text-[13px] text-muted">
+          <span>كود الموظف *</span>
+          <Input
+            value={employeeCode}
+            onChange={(e) => setEmployeeCode(e.target.value)}
+            disabled={busy}
+            autoFocus
+            placeholder="مثال: EMP-012"
+          />
+        </label>
+      </DialogBody>
+      <DialogFooter>
+        <Button type="button" disabled={busy} onClick={onClose} variant="secondary">
+          إلغاء
+        </Button>
+        <Button type="submit" disabled={busy || !employeeCode.trim()} variant="primary">
+          {busy ? <Loader2 className="animate-spin" /> : <ArchiveRestore />}
+          استعادة
+        </Button>
+      </DialogFooter>
+    </form>
+  )
+}
 
 function ResetPasswordDialog({
   user,
