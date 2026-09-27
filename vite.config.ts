@@ -9,8 +9,7 @@ const rootDir = path.dirname(fileURLToPath(import.meta.url))
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  // Local dev proxy only (avoids CORS on localhost). Production calls the
-  // API directly via VITE_API_URL — no server-side proxy anymore.
+  // Local proxy; production nginx uses the same upstream origin setting.
   const apiTarget = env.API_PROXY_TARGET || 'https://hr-api.ellwaa.com'
 
   const proxy = apiTarget

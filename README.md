@@ -28,8 +28,8 @@ Browser requests to `/api` are forwarded by Vite to `API_PROXY_TARGET`. This var
 
 | Variable | Where | Purpose |
 | --- | --- | --- |
-| `VITE_API_URL` | Frontend, inlined at build time | Complete API base including `/api`. Use `/api` for local Vite development, or `https://hr-api.ellwaa.com/api` for Docker/Coolify. |
-| `API_PROXY_TARGET` | Vite only | Upstream HR API origin, such as `https://hr-api.ellwaa.com`. |
+| `VITE_API_URL` | Frontend, inlined at build time | Use `/api` for local Vite and Docker/Coolify. |
+| `API_PROXY_TARGET` | Vite / nginx runtime | Upstream HR API origin, such as `https://hr-api.ellwaa.com`, without `/api`. |
 | `PORT` | nginx runtime | Listening port, default `3000`. |
 
 Copy `.env.example` to `.env` for local Vite. Copy `.env.docker.example` to `.env.docker` for Compose.
@@ -43,9 +43,11 @@ docker compose --env-file .env.docker up --build
 
 App: [http://localhost:3000](http://localhost:3000). Health check: `GET /healthz`.
 
-For Coolify, use the Dockerfile build pack and expose port `3000`. Set `VITE_API_URL=https://hr-api.ellwaa.com/api` at build time and `PORT=3000` at runtime.
+For Coolify, use the Dockerfile build pack and expose port `3000`. Set `VITE_API_URL=/api` at build time, and `PORT=3000` and `API_PROXY_TARGET=https://hr-api.ellwaa.com` at runtime.
 
-Production nginx serves static files. The browser calls the API directly, so the API must allow the website origin through CORS. Rebuild the frontend after changing `VITE_API_URL`.
+Production nginx forwards `/api/` requests to the HR API, preserving the path, request body, query string, and authorization header. Other routes serve the frontend. This keeps browser API calls on the website origin. Rebuild and redeploy after changing `VITE_API_URL` or upgrading the nginx template; restart/redeploy after changing `API_PROXY_TARGET`.
+
+An nginx HTML `405` on login indicates that an old static-only deployment is handling the API POST. A `502` or `503` after proxying indicates an upstream connectivity or availability problem; check the HR API container and its domain routing.
 
 ## Scripts
 

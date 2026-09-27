@@ -7,9 +7,9 @@
 #   Build Pack ........ Dockerfile
 #   Port Exposes ...... 3000
 #   Healthcheck Path .. /healthz
-#   Env (build) ........ VITE_API_URL=https://hr-api.ellwaa.com/api (Buildtime)
-#   Env (runtime) ...... PORT=3000
-#   The browser calls the API directly (CORS). No server-side proxy.
+#   Env (build) ........ VITE_API_URL=/api (Buildtime)
+#   Env (runtime) ...... PORT=3000, API_PROXY_TARGET=https://hr-api.ellwaa.com
+#   nginx forwards same-origin /api requests to the HR API.
 #
 # Local:
 #   docker compose up --build
@@ -33,7 +33,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-ARG VITE_API_URL=https://hr-api.ellwaa.com/api
+ARG VITE_API_URL=/api
 ENV VITE_API_URL=${VITE_API_URL}
 ENV NODE_ENV=production
 
@@ -44,14 +44,15 @@ RUN npm run build && test -f dist/index.html
 ############################
 FROM nginx:1.27-alpine AS runtime
 
-RUN apk add --no-cache curl \
+RUN apk add --no-cache curl ca-certificates \
  && rm -f /etc/nginx/conf.d/default.conf
 
-# Substitute only this name in the nginx template (keep $uri / $host)
-ENV NGINX_ENVSUBST_FILTER=^(PORT)$
+# Substitute only these names in the nginx template (keep nginx variables).
+ENV NGINX_ENVSUBST_FILTER=^(PORT|API_PROXY_TARGET)$
 
 # Runtime default (Coolify Environment Variables override this).
 ENV PORT=3000
+ENV API_PROXY_TARGET=https://hr-api.ellwaa.com
 
 COPY docker/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY docker/18-validate-env.envsh /docker-entrypoint.d/18-validate-env.envsh

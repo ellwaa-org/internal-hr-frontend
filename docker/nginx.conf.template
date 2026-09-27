@@ -1,5 +1,4 @@
-# envsubst replaces ${PORT} (see NGINX_ENVSUBST_FILTER). Static files only —
-# the browser talks to the API directly (VITE_API_URL, CORS on the API).
+# envsubst replaces PORT and API_PROXY_TARGET; nginx variables stay intact.
 
 server {
     listen ${PORT};
@@ -33,6 +32,18 @@ server {
         access_log off;
         default_type text/plain;
         return 200 'ok';
+    }
+
+    # Preserve the complete /api path, query string, request body and auth header.
+    # API requests must never fall through to the SPA's static-file handler.
+    location /api/ {
+        proxy_pass ${API_PROXY_TARGET};
+        proxy_http_version 1.1;
+        proxy_set_header Host $proxy_host;
+        proxy_ssl_server_name on;
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+        proxy_ssl_verify_depth 3;
     }
 
     location /assets/ {

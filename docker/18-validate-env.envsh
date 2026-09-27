@@ -1,4 +1,4 @@
-# Sourced before envsubst. Never crash on missing/empty Coolify env.
+# Sourced before envsubst. Default empty values and reject invalid API origins.
 
 DEFAULT_PORT="3000"
 
@@ -16,5 +16,13 @@ case "${PORT}" in
     export PORT
     ;;
 esac
+
+API_PROXY_TARGET="${API_PROXY_TARGET:-https://hr-api.ellwaa.com}"
+API_PROXY_TARGET="${API_PROXY_TARGET%/}"
+if ! printf '%s\n' "${API_PROXY_TARGET}" | grep -Eq '^https?://[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:[0-9]+)?$'; then
+  echo "ERROR: API_PROXY_TARGET must be an http(s) origin without a path (do not include /api)." >&2
+  exit 1
+fi
+export API_PROXY_TARGET
 
 echo "Listening on port: ${PORT}"
