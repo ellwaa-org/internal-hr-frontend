@@ -2,20 +2,15 @@
 
 Arabic web panel for **ADMIN** and **HR** at اللواء للخدمات القانونية. Employees use the mobile app. Both talk to the same HR API.
 
-This repo is the web frontend only.
+This repository contains the web frontend only.
 
-## Who can sign in
+## Sign in
 
-Only `ADMIN` and `HR`. An `EMPLOYEE` account can authenticate, but the panel signs them out.
+Opening the website displays the employee-code/password login form immediately. Enter an existing ADMIN or HR account to access the panel.
 
-Two login methods on the same screen:
+The app sends credentials to `POST /api/auth/login`, stores the returned HR access token, and checks `GET /api/auth/profile` using `Authorization: Bearer {accessToken}`. EMPLOYEE accounts cannot access this panel. Signing out clears the stored token and returns to the login form.
 
-| Method | How | Notes |
-| --- | --- | --- |
-| Local | Employee code + password | Unchanged. `deviceId` is sent for EMPLOYEE accounts only (the API ignores it for ADMIN/HR). |
-| SSO | **تسجيل الدخول عبر SSO** | Opens the API, then the IdP. The API exchanges the OIDC code. This app stores the **HR JWT**, never the IdP token. |
-
-After either login the app calls `GET /api/auth/profile` with `Authorization: Bearer {accessToken}`.
+A saved session is checked when the app opens. Invalid or expired sessions return to the login form. The HR API must be reachable for login and data operations.
 
 ## Run locally
 
@@ -25,43 +20,21 @@ npm install
 npm run dev
 ```
 
-Open [http://127.0.0.1:5173](http://127.0.0.1:5173).
+Open [http://localhost:5173](http://localhost:5173).
 
-`API_PROXY_TARGET` is server-side only (Vite proxy). Browser requests go to `/api` and are forwarded to that host. Do not name it `VITE_API_PROXY_TARGET` or the API host is baked into the JS bundle.
+Browser requests to `/api` are forwarded by Vite to `API_PROXY_TARGET`. This variable is server-side only; do not prefix it with `VITE_`.
 
 ## Environment
 
 | Variable | Where | Purpose |
 | --- | --- | --- |
-| `VITE_API_URL` | Frontend (inlined at build) | API prefix. Default `/api`. SSO start is `{VITE_API_URL}/auth/sso?redirect=true`. |
-| `API_PROXY_TARGET` | Vite / nginx only | Upstream HR API, e.g. `https://hr-api-staging.ellwaa.com`. |
+| `VITE_API_URL` | Frontend, inlined at build time | Complete API base including `/api`. Use `/api` for local Vite development, or `https://hr-api.ellwaa.com/api` for Docker/Coolify. |
+| `API_PROXY_TARGET` | Vite only | Upstream HR API origin, such as `https://hr-api.ellwaa.com`. |
+| `PORT` | nginx runtime | Listening port, default `3000`. |
 
-Copy `.env.example` → `.env` for local Vite. Copy `.env.docker.example` → `.env.docker` for Compose.
+Copy `.env.example` to `.env` for local Vite. Copy `.env.docker.example` to `.env.docker` for Compose.
 
-## SSO (backend)
-
-The web app uses the **API callback** flow. Do not point `OIDC_REDIRECT_URI` at this SPA.
-
-On the HR API, set:
-
-```env
-OIDC_REDIRECT_URI={API_URL}/api/auth/sso/callback
-OIDC_FRONTEND_REDIRECT=https://YOUR_WEB_ORIGIN/auth/sso
-```
-
-Allow every origin this panel is served from, including local if you test SSO on Vite:
-
-- `https://YOUR_WEB_ORIGIN/auth/sso`
-- `http://127.0.0.1:5173/auth/sso`
-- `http://localhost:5173/auth/sso`
-
-If `returnTo` is not allowlisted, the login page stays up and shows an error. Local code/password login still works.
-
-SSO callback route: `/auth/sso`. The API redirects here with `accessToken` or `ssoError`. The token is stripped from the address bar after it is saved.
-
-If SSO is not configured (`503`), the SSO button is hidden.
-
-## Docker
+## Docker and Coolify
 
 ```bash
 cp .env.docker.example .env.docker
@@ -70,13 +43,15 @@ docker compose --env-file .env.docker up --build
 
 App: [http://localhost:3000](http://localhost:3000). Health check: `GET /healthz`.
 
-Coolify: Dockerfile, port `3000`, runtime `API_PROXY_TARGET` (not build-time), optional build-time `VITE_API_URL=/api`.
+For Coolify, use the Dockerfile build pack and expose port `3000`. Set `VITE_API_URL=https://hr-api.ellwaa.com/api` at build time and `PORT=3000` at runtime.
+
+Production nginx serves static files. The browser calls the API directly, so the API must allow the website origin through CORS. Rebuild the frontend after changing `VITE_API_URL`.
 
 ## Scripts
 
 ```bash
 npm run dev      # Vite
-npm run build    # typecheck + production bundle
-npm run preview  # serve the production bundle
+npm run build    # Typecheck and production bundle
+npm run preview  # Serve the production bundle
 npm run lint
 ```
