@@ -32,17 +32,8 @@ function SsoCallbackPage({ onLogin }: { onLogin: (token: string) => void }) {
       return
     }
 
-    // State is only stored when THIS app started the flow (login page button).
-    // A missing expectedState means an external start (e.g. the portal
-    // launcher tile drove the OIDC round-trip); the code itself is still
-    // validated server-side (one-time, short expiry, exchanged confidentially),
-    // so accept it instead of dead-ending launcher-initiated logins.
     const expectedState = consumeSsoState()
-    if (!code || !state) {
-      setError('جلسة SSO غير صالحة. أعد المحاولة من صفحة الدخول.')
-      return
-    }
-    if (expectedState && state !== expectedState) {
+    if (!code || !state || !expectedState || state !== expectedState) {
       setError('جلسة SSO غير صالحة. أعد المحاولة من صفحة الدخول.')
       return
     }
