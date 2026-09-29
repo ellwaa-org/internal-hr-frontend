@@ -33,7 +33,11 @@ function SsoCallbackPage({ onLogin }: { onLogin: (token: string) => void }) {
     }
 
     const expectedState = consumeSsoState()
-    if (!code || !state || !expectedState || state !== expectedState) {
+    // Launcher-initiated flow: the portal issued the code directly, so no
+    // state was stored here — accept it (the code is single-use and bound to
+    // this client + redirect URI). Strict state matching still applies when
+    // the flow started from this app's own login page.
+    if (!code || (expectedState && state !== expectedState)) {
       setError('جلسة SSO غير صالحة. أعد المحاولة من صفحة الدخول.')
       return
     }
