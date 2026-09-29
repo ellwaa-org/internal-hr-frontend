@@ -1,4 +1,6 @@
 // Same-origin requests use the Vite development or nginx production proxy.
+import { z } from 'zod'
+
 const API_BASE = (
   (import.meta.env.VITE_API_URL as string | undefined) ??
   '/api'
@@ -192,6 +194,89 @@ export async function login(input: LoginInput): Promise<string> {
   const token = data.accessToken ?? data.access_token ?? data.token
   if (!token) throw new Error(translateErrorMessage('Login response did not include an access token'))
   return token
+}
+
+/* ---------- Unified SSO registration (Account Manager IdP) ---------- */
+
+export interface SsoConfig {
+  enabled: boolean
+  issuer: string
+  authorizeUrl: string
+  clientId: string
+  systemCode: string
+}
+
+export function getSsoConfig(): Promise<unknown> {
+  return request('/auth/sso/config', { method: 'GET' })
+}
+
+export interface UnifiedRegisterInput {
+  firstName: string
+  lastName: string
+  email: string
+  phone?: string
+  password: string
+}
+
+export const unifiedRegisterSchema = z.object({
+  firstName: z.string().trim().min(1, 'الاسم الأول مطلوب.').max(100, 'الاسم الأول طويل جداً.'),
+  lastName: z.string().trim().min(1, 'الاسم الأخير مطلوب.').max(100, 'الاسم الأخير طويل جداً.'),
+  email: z
+    .string()
+    .trim()
+    .min(1, 'البريد الإلكتروني مطلوب.')
+    .email('البريد الإلكتروني غير صالح.')
+    .max(255, 'البريد الإلكتروني طويل جداً.'),
+  phone: z
+    .string()
+    .trim()
+    .min(5, 'رقم الهاتف غير صالح.')
+    .max(50, 'رقم الهاتف طويل جداً.')
+    .regex(/^[0-9+()\-\s]+$/, 'رقم الهاتف يحتوي على رموز غير صالحة.')
+    .optional(),
+  password: z
+    .string()
+    .min(8, 'كلمة المرور يجب أن تكون 8 أحرف على الأقل.')
+    .max(128, 'كلمة المرور طويلة جداً.')
+    .regex(/[A-Za-z]/, 'كلمة المرور يجب أن تحتوي على حرف.')
+    .regex(/[0-9]/, 'كلمة المرور يجب أن تحتوي على رقم.'),
+})
+
+export function unifiedRegisterApi(input: UnifiedRegisterInput): Promise<unknown> {
+  return request('/auth/sso/register', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export interface SsoCallbackResult {
+  data: {
+    user: { id: number; employeeCode: string; role: string; fullName: string }
+    accessToken: string
+    refreshToken?: string
+    expiresIn: number
+  }
+}
+
+export function ssoCallback(code: string, redirectUri: string): Promise<unknown> {
+  return request('/auth/sso/callback', {
+    method: 'POST',
+    body: JSON.stringify({ code, redirectUri }),
+  })
+}
+
+export function ssoRefresh(refreshToken: string): Promise<unknown> {
+  return request('/auth/sso/refresh', {
+    method: 'POST',
+    body: JSON.stringify({ refreshToken }),
+  })
+}
+
+export function ssoLogout(refreshToken: string): Promise<unknown> {
+  return request('/auth/sso/logout', {
+    method: 'POST',
+    body: JSON.stringify({ refreshToken }),
+  })
 }
 
 export async function getProfile(token: string): Promise<Profile> {
