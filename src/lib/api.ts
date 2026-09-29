@@ -178,10 +178,16 @@ export interface LoginResponse {
   accessToken?: string
   access_token?: string
   token?: string
+  refreshToken?: string | null
   user?: Profile
 }
 
-export async function login(input: LoginInput): Promise<string> {
+export interface LoginSession {
+  token: string
+  refreshToken: string | null
+}
+
+export async function login(input: LoginInput): Promise<LoginSession> {
   const payload = parseOrThrow(loginSchema, input)
   const data = await request<LoginResponse>('/auth/login', {
     method: 'POST',
@@ -193,7 +199,7 @@ export async function login(input: LoginInput): Promise<string> {
   })
   const token = data.accessToken ?? data.access_token ?? data.token
   if (!token) throw new Error(translateErrorMessage('Login response did not include an access token'))
-  return token
+  return { token, refreshToken: data.refreshToken ?? null }
 }
 
 /* ---------- Unified SSO registration (Account Manager IdP) ---------- */

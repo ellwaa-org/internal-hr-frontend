@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Eye, EyeOff, UserPlus } from 'lucide-react'
 import logo from '@/assets/logo.webp'
 import { getDeviceId, login, setToken } from '@/lib/api'
-import { loadSsoConfig, startSsoLogin, type SsoConfig } from '@/lib/sso'
+import { loadSsoConfig, startSsoLogin, storeSsoTokens, type SsoConfig } from '@/lib/sso'
 import { loginSchema, zodErrorMessage } from '@/lib/schemas'
 import { notify } from '@/lib/toast'
 
@@ -43,11 +43,16 @@ function LoginPage({ onLogin }: { onLogin: (token: string) => void }) {
     setLoading(true)
     const toastId = notify.loading('جارٍ تسجيل الدخول...')
     try {
-      const token = await login(parsed.data)
+      const session = await login(parsed.data)
+      // Global credentials: keep the refresh token so the SSO silent refresh
+      // keeps the session alive, exactly like the SSO redirect flow.
+      if (sso?.enabled && session.refreshToken) {
+        storeSsoTokens({ accessToken: session.token, refreshToken: session.refreshToken })
+      }
       notify.dismiss(toastId)
       notify.success('تم تسجيل الدخول بنجاح', 'مرحباً بك في نظام الموارد البشرية.')
-      setToken(token)
-      onLogin(token)
+      setToken(session.token)
+      onLogin(session.token)
     } catch (err) {
       notify.dismiss(toastId)
       notify.error(err, 'فشل تسجيل الدخول. تحقق من كود الموظف وكلمة المرور.')
