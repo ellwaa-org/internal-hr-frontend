@@ -58,6 +58,40 @@ export const registerUserSchema = z.object({
   bio: bioFieldSchema,
 })
 
+/** Unified (IdP-backed) registration — mirrors the Account Manager schema. */
+export const registerUnifiedSchema = z.object({
+  firstName: z
+    .string()
+    .trim()
+    .min(1, 'الاسم الأول مطلوب.')
+    .max(100, 'الاسم الأول طويل جداً.'),
+  lastName: z
+    .string()
+    .trim()
+    .min(1, 'الاسم الأخير مطلوب.')
+    .max(100, 'الاسم الأخير طويل جداً.'),
+  email: z
+    .string()
+    .trim()
+    .min(1, 'البريد الإلكتروني مطلوب.')
+    .email('البريد الإلكتروني غير صالح.')
+    .max(255, 'البريد الإلكتروني طويل جداً.'),
+  phone: z
+    .string()
+    .trim()
+    .min(5, 'رقم الهاتف غير صالح.')
+    .max(50, 'رقم الهاتف طويل جداً.')
+    .regex(/^[0-9+()\-\s]+$/, 'رقم الهاتف يحتوي على رموز غير صالحة.')
+    .optional(),
+  password: z
+    .string()
+    .min(8, 'كلمة المرور يجب أن تكون 8 أحرف على الأقل.')
+    .max(128, 'كلمة المرور طويلة جداً.')
+    .regex(/[A-Za-z]/, 'كلمة المرور يجب أن تحتوي على حرف.')
+    .regex(/[0-9]/, 'كلمة المرور يجب أن تحتوي على رقم.'),
+  confirmPassword: z.string().min(1, 'تأكيد كلمة المرور مطلوب.'),
+})
+
 export const updateUserSchema = z.object({
   phoneNumber: z
     .string()

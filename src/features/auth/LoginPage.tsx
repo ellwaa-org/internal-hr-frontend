@@ -1,7 +1,8 @@
-import { useState, type FormEvent } from 'react'
-import { Eye, EyeOff } from 'lucide-react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Eye, EyeOff, UserPlus } from 'lucide-react'
 import logo from '@/assets/logo.webp'
 import { getDeviceId, login, setToken } from '@/lib/api'
+import { loadSsoConfig, startSsoLogin, type SsoConfig } from '@/lib/sso'
 import { loginSchema, zodErrorMessage } from '@/lib/schemas'
 import { notify } from '@/lib/toast'
 
@@ -11,6 +12,18 @@ function LoginPage({ onLogin }: { onLogin: (token: string) => void }) {
   const [showPassword, setShowPassword] = useState(false)
   const [fieldError, setFieldError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [sso, setSso] = useState<SsoConfig | null>(null)
+  const loadedRef = useRef(false)
+
+  useEffect(() => {
+    if (loadedRef.current) return
+    loadedRef.current = true
+    loadSsoConfig().then((value) => {
+      if (!value.enabled) return
+      setSso(value)
+    })
+  }, [])
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setFieldError(null)
@@ -41,6 +54,11 @@ function LoginPage({ onLogin }: { onLogin: (token: string) => void }) {
     } finally {
       setLoading(false)
     }
+  }
+
+  const startSso = () => {
+    if (!sso?.enabled) return
+    startSsoLogin('/')
   }
 
   return (
@@ -108,6 +126,29 @@ function LoginPage({ onLogin }: { onLogin: (token: string) => void }) {
         >
           {loading ? 'جارٍ تسجيل الدخول...' : 'تسجيل الدخول'}
         </button>
+
+        {sso?.enabled && (
+          <>
+            <button
+              type="button"
+              onClick={startSso}
+              className="w-full cursor-pointer rounded-lg border border-neutral-300 bg-white px-4 py-[11px] text-[15px] font-semibold text-foreground transition-colors hover:bg-neutral-50 active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+            >
+              الدخول الموحّد (SSO)
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                window.location.assign('/register')
+              }}
+              className="m-0 flex w-full cursor-pointer items-center justify-center gap-1.5 border-none bg-transparent p-0 text-center text-sm font-medium text-muted underline-offset-2 hover:text-foreground hover:underline"
+            >
+              <UserPlus className="h-4 w-4" />
+              ليست لديك حالة؟ إنشاء حساب موحّد
+            </button>
+          </>
+        )}
 
       </form>
     </div>
