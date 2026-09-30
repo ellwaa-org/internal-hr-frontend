@@ -33,7 +33,16 @@ function SsoCallbackPage({ onLogin }: { onLogin: (token: string) => void }) {
     }
 
     const expectedState = consumeSsoState()
-    if (!code || !state || !expectedState || state !== expectedState) {
+    if (!code || !state) {
+      setError('جلسة SSO غير صالحة. أعد المحاولة من صفحة الدخول.')
+      return
+    }
+    // Cross-origin / portal-initiated flow: when the SSO login was started
+    // from the launcher portal (or any other origin) there is no local
+    // `hr-sso-state` in sessionStorage. In that case the portal owns the
+    // CSRF `state` and we trust the IdP-issued code + redirect_uri binding,
+    // so we skip the local state comparison and just exchange the code.
+    if (expectedState && state !== expectedState) {
       setError('جلسة SSO غير صالحة. أعد المحاولة من صفحة الدخول.')
       return
     }
