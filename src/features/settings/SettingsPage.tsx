@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useState, type FormEvent, type ReactNode } from 'react'
 import { Eye, EyeOff, KeyRound, Loader2, RotateCcw, Save, Shield, UserRound } from 'lucide-react'
 import { changePassword, getProfile, updateUser, type Profile } from '@/lib/api'
 import { isUnauthorizedError } from '@/lib/errors'
@@ -165,14 +165,16 @@ function SettingsPage({
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [savingPassword, setSavingPassword] = useState(false)
 
-  useEffect(() => {
+  const [previousProfile, setPreviousProfile] = useState(profile)
+  if (profile !== previousProfile) {
+    setPreviousProfile(profile)
     setFullName(profile.fullName)
     setPhoneNumber(profile.phoneNumber)
     setEmail(profile.email ?? '')
     setEmployeeCode(profile.employeeCode)
     setBio(profile.bio ?? '')
     setProfileError(null)
-  }, [profile])
+  }
 
   const profileDirty =
     fullName.trim() !== profile.fullName ||

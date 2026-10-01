@@ -12,7 +12,7 @@ import { notify } from '@/lib/toast'
  * the user continues to SSO sign-in. Falls back to local-only UI when SSO is
  * not configured.
  */
-function RegisterPage({ onLogin: _onLogin }: { onLogin: (token: string) => void }) {
+function RegisterPage() {
   const [config, setConfig] = useState<SsoConfig | null>(null)
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
@@ -64,7 +64,8 @@ function RegisterPage({ onLogin: _onLogin }: { onLogin: (token: string) => void 
     setLoading(true)
     const toastId = notify.loading('جارٍ إنشاء الحساب...')
     try {
-      const { confirmPassword: _confirm, ...payload } = parsed.data
+      const { firstName, lastName, email, phone, password } = parsed.data
+      const payload = { firstName, lastName, email, phone, password }
       await unifiedRegisterApi(payload)
       notify.dismiss(toastId)
       notify.success('تم إنشاء الحساب', 'أكمل الدخول الموحد للمتابعة.')

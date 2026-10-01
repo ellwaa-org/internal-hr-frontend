@@ -22,20 +22,19 @@ function SsoCallbackPage({ onLogin }: { onLogin: (token: string) => void }) {
     if (handled.current) return
     handled.current = true
 
+    void (async () => {
     const params = new URLSearchParams(window.location.search)
     const code = params.get('code')
     const state = params.get('state')
     const idpError = params.get('error')
 
     if (idpError) {
-      setError(idpError === 'access_denied' ? 'تم رفض الوصول من مزود الهوية.' : `خطأ SSO: ${idpError}`)
-      return
+      throw new Error(idpError === 'access_denied' ? 'تم رفض الوصول من مزود الهوية.' : `خطأ SSO: ${idpError}`)
     }
 
     const expectedState = consumeSsoState()
     if (!code || !state) {
-      setError('جلسة SSO غير صالحة. أعد المحاولة من صفحة الدخول.')
-      return
+      throw new Error('جلسة SSO غير صالحة. أعد المحاولة من صفحة الدخول.')
     }
     // Cross-origin / portal-initiated flow: when the SSO login was started
     // from the launcher portal (or any other origin) there is no local
@@ -43,11 +42,10 @@ function SsoCallbackPage({ onLogin }: { onLogin: (token: string) => void }) {
     // CSRF `state` and we trust the IdP-issued code + redirect_uri binding,
     // so we skip the local state comparison and just exchange the code.
     if (expectedState && state !== expectedState) {
-      setError('جلسة SSO غير صالحة. أعد المحاولة من صفحة الدخول.')
-      return
+      throw new Error('جلسة SSO غير صالحة. أعد المحاولة من صفحة الدخول.')
     }
 
-    completeSsoLogin(code)
+    await completeSsoLogin(code)
       .then((result) => {
         clearSsoState()
         setToken(result.accessToken)
@@ -61,6 +59,7 @@ function SsoCallbackPage({ onLogin }: { onLogin: (token: string) => void }) {
           err instanceof Error ? err.message : 'فشل تسجيل الدخول الموحد. أعد المحاولة.'
         setError(message)
       })
+    })().catch((err: unknown) => setError(err instanceof Error ? err.message : 'SSO login failed'))
   }, [onLogin])
 
   if (error) {

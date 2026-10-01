@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
@@ -28,9 +28,11 @@ export function DayPicker({
   const selected = useMemo(() => parseIsoDate(date), [date])
   const [month, setMonth] = useState(selected)
 
-  useEffect(() => {
+  const [previousSelected, setPreviousSelected] = useState(selected)
+  if (selected !== previousSelected) {
+    setPreviousSelected(selected)
     setMonth(selected)
-  }, [selected])
+  }
 
   return (
     <div className={cn('flex items-center gap-2 max-[720px]:w-full', className)}>

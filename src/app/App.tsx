@@ -42,7 +42,7 @@ function App() {
   }
 
   if (window.location.pathname === '/register') {
-    return <RegisterPage onLogin={handleLogin} />
+    return <RegisterPage />
   }
 
   if (!token) return <LoginPage onLogin={handleLogin} />
