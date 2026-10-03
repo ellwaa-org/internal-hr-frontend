@@ -5,6 +5,8 @@ import {
   completeSsoLogin,
   consumeSsoReturnTo,
   consumeSsoState,
+  loadSsoConfig,
+  startSsoLogin,
 } from '@/lib/sso'
 import { setToken } from '@/lib/api'
 import { notify } from '@/lib/toast'
@@ -24,6 +26,12 @@ function SsoCallbackPage({ onLogin }: { onLogin: (token: string) => void }) {
 
     void (async () => {
     const params = new URLSearchParams(window.location.search)
+    if (params.get('sso') === 'launch') {
+      const config = await loadSsoConfig()
+      if (!config.enabled || !config.clientId || !config.authorizeUrl) throw new Error('SSO is not configured')
+      startSsoLogin('/')
+      return
+    }
     const code = params.get('code')
     const state = params.get('state')
     const idpError = params.get('error')
@@ -33,17 +41,10 @@ function SsoCallbackPage({ onLogin }: { onLogin: (token: string) => void }) {
     }
 
     const expectedState = consumeSsoState()
-    if (!code || !state) {
+    if (!code || !state || !expectedState || state !== expectedState) {
       throw new Error('جلسة SSO غير صالحة. أعد المحاولة من صفحة الدخول.')
     }
-    // Cross-origin / portal-initiated flow: when the SSO login was started
-    // from the launcher portal (or any other origin) there is no local
-    // `hr-sso-state` in sessionStorage. In that case the portal owns the
-    // CSRF `state` and we trust the IdP-issued code + redirect_uri binding,
-    // so we skip the local state comparison and just exchange the code.
-    if (expectedState && state !== expectedState) {
-      throw new Error('جلسة SSO غير صالحة. أعد المحاولة من صفحة الدخول.')
-    }
+    window.history.replaceState(window.history.state, '', window.location.pathname)
 
     await completeSsoLogin(code)
       .then((result) => {

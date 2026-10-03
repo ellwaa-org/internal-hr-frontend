@@ -29,7 +29,7 @@ export default defineConfig(({ mode }) => {
         '@': path.resolve(rootDir, './src'),
       },
     },
-    server: { proxy },
-    preview: { proxy },
+    server: { port: Number(env.VITE_DEV_SERVER_PORT) || 5174, proxy },
+    preview: { port: Number(env.VITE_DEV_SERVER_PORT) || 5174, proxy },
   }
 })

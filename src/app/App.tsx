@@ -49,11 +49,8 @@ function App() {
   return <HomePage token={token} onSignOut={handleSignOut} />
 }
 
-function readCallback(): { code: string; state: string } | null {
-  const params = new URLSearchParams(window.location.search)
-  const code = params.get('code')
-  const state = params.get('state')
-  return code && state ? { code, state } : null
+function readCallback(): boolean {
+  return ['/auth/callback', '/auth/sso/callback', '/sso/callback'].includes(window.location.pathname)
 }
 
 export default App
