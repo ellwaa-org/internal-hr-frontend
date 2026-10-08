@@ -17,7 +17,7 @@ import {
   type UserRecord,
 } from '@/lib/api'
 import { formatDateTime12 } from '@/lib/datetime'
-import { isForbiddenError, isUnauthorizedError } from '@/lib/errors'
+import { isUnauthorizedError } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-client'
 import { notify } from '@/lib/toast'
 import { cn } from '@/lib/utils'
@@ -247,8 +247,6 @@ export function SecurityLogsDialog({
   const attendanceCount = attendanceQuery.data?.attempts.length ?? 0
 
   const handleQueryError = (err: unknown) => {
-    // 403 = missing permission: already toasted globally, session stays alive.
-    if (isForbiddenError(err)) return
     if (isUnauthorizedError(err)) {
       notify.error(err, 'انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.')
       onUnauthorized()

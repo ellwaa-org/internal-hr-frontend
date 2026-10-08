@@ -23,8 +23,7 @@ import {
   type UpdateFieldTaskInput,
   type UserRecord,
 } from '@/lib/api'
-import { isForbiddenError, isUnauthorizedError } from '@/lib/errors'
-import { hasPermission } from '@/lib/permissions'
+import { isUnauthorizedError } from '@/lib/errors'
 import {
   formatDate,
   formatDateTime12,
@@ -247,11 +246,9 @@ function buildTaskRows(
 
 function TasksPage({
   token,
-  permissions,
   onUnauthorized,
 }: {
   token: string
-  permissions: string[]
   onUnauthorized: () => void
 }) {
   const queryClient = useQueryClient()
@@ -269,14 +266,8 @@ function TasksPage({
   const [modal, setModal] = useState<ModalMode>(null)
   const [busy, setBusy] = useState(false)
 
-  const canExport = hasPermission(permissions, 'attendance.export')
-  const canUpdateTasks = hasPermission(permissions, 'attendance.taskUpdateAny')
-  const canEndTasks = hasPermission(permissions, 'attendance.taskEndAny')
-
   const handleApiError = useCallback(
     (err: unknown, fallback: string) => {
-      // 403 = missing permission: already toasted globally, session stays alive.
-      if (isForbiddenError(err)) return
       if (isUnauthorizedError(err)) {
         notify.error(err, 'انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.')
         onUnauthorized()
@@ -477,18 +468,16 @@ function TasksPage({
         title="المهام الخارجية"
         subtitle="متابعة مهام الموظفين خارج المكتب، مع إمكانية التعديل والإغلاق من الإدارة"
         action={
-          canExport ? (
-            <Button
-              type="button"
-              disabled={exporting}
-              onClick={() => setExportOpen(true)}
-              variant="primary"
-              fullOnMobile
-            >
-              {exporting ? <Loader2 className="animate-spin" /> : <Download />}
-              تصدير Excel
-            </Button>
-          ) : undefined
+          <Button
+            type="button"
+            disabled={exporting}
+            onClick={() => setExportOpen(true)}
+            variant="primary"
+            fullOnMobile
+          >
+            {exporting ? <Loader2 className="animate-spin" /> : <Download />}
+            تصدير Excel
+          </Button>
         }
       />
 
@@ -680,13 +669,11 @@ function TasksPage({
                           <Eye />
                           عرض التفاصيل
                         </DropdownMenuItem>
-                        {canUpdateTasks && (
-                          <DropdownMenuItem onSelect={() => setModal({ type: 'edit', row })}>
-                            <Pencil />
-                            تعديل
-                          </DropdownMenuItem>
-                        )}
-                        {canEndTasks && isTaskOpen(row) ? (
+                        <DropdownMenuItem onSelect={() => setModal({ type: 'edit', row })}>
+                          <Pencil />
+                          تعديل
+                        </DropdownMenuItem>
+                        {isTaskOpen(row) ? (
                           <DropdownMenuItem onSelect={() => setModal({ type: 'close', row })}>
                             <CircleStop />
                             إغلاق المهمة
@@ -753,16 +740,14 @@ function TasksPage({
                 <Button type="button" onClick={closeModal} variant="secondary">
                   إغلاق
                 </Button>
-                {canUpdateTasks && (
-                  <Button
-                    type="button"
-                    onClick={() => setModal({ type: 'edit', row: detailDialog.data! })}
-                    variant="primary"
-                  >
-                    <Pencil />
-                    تعديل
-                  </Button>
-                )}
+                <Button
+                  type="button"
+                  onClick={() => setModal({ type: 'edit', row: detailDialog.data! })}
+                  variant="primary"
+                >
+                  <Pencil />
+                  تعديل
+                </Button>
               </>
             ) : (
               <Button type="button" onClick={closeModal} variant="secondary">

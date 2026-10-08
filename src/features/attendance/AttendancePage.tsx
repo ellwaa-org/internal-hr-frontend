@@ -17,9 +17,8 @@ import {
   type JustificationStatus,
   type OfficeOption,
 } from '@/lib/api'
-import { isForbiddenError, isUnauthorizedError } from '@/lib/errors'
+import { isUnauthorizedError } from '@/lib/errors'
 import { formatDate, formatTime12, startOfMonthIso, todayIsoDate } from '@/lib/datetime'
-import { hasPermission } from '@/lib/permissions'
 import { queryKeys, QUERY_STALE_TIME_FREQUENT } from '@/lib/query-client'
 import { notify } from '@/lib/toast'
 import { useDialogState } from '@/lib/use-dialog-state'
@@ -241,11 +240,9 @@ function apiStatusForFilter(filter: StatusFilter): AttendanceUserStatus | undefi
 
 function AttendancePage({
   token,
-  permissions,
   onUnauthorized,
 }: {
   token: string
-  permissions: string[]
   onUnauthorized: () => void
 }) {
   const queryClient = useQueryClient()
@@ -265,13 +262,8 @@ function AttendancePage({
   const [selectedUser, setSelectedUser] = useState<AttendanceCalendarUser | null>(null)
   const calendarDialog = useDialogState(selectedUser)
 
-  const canExport = hasPermission(permissions, 'attendance.export')
-  const canReviewJustifications = hasPermission(permissions, 'attendance.justificationManage')
-
   const handleApiError = useCallback(
     (err: unknown, fallback: string) => {
-      // 403 = missing permission: already toasted globally, session stays alive.
-      if (isForbiddenError(err)) return
       if (isUnauthorizedError(err)) {
         notify.error(err, 'انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.')
         onUnauthorized()
@@ -469,18 +461,16 @@ function AttendancePage({
         title="الحضور والانصراف"
         subtitle="متابعة الحضور مع فلترة التاريخ والحالة والمكتب والإدارة والبحث بالاسم"
         action={
-          canExport ? (
-            <Button
-              type="button"
-              disabled={exporting}
-              onClick={() => setExportOpen(true)}
-              variant="primary"
-              fullOnMobile
-            >
-              {exporting ? <Loader2 className="animate-spin" /> : <Download />}
-              تصدير Excel
-            </Button>
-          ) : undefined
+          <Button
+            type="button"
+            disabled={exporting}
+            onClick={() => setExportOpen(true)}
+            variant="primary"
+            fullOnMobile
+          >
+            {exporting ? <Loader2 className="animate-spin" /> : <Download />}
+            تصدير Excel
+          </Button>
         }
       />
 
@@ -725,7 +715,7 @@ function AttendancePage({
                       )}
                     </Td>
                     <TdActions>
-                      {!record || !canReviewJustifications ? (
+                      {!record ? (
                         <span className="text-muted">—</span>
                       ) : (
                         <div className="flex flex-col gap-1.5">
