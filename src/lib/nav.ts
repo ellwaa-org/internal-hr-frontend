@@ -7,7 +7,6 @@ export const NAV_PAGES = [
   'attendance',
   'tasks',
   'roles',
-  'auditLogs',
   'settings',
 ] as const
 
@@ -20,7 +19,6 @@ export const NAV_PATHS = {
   attendance: '/attendance',
   tasks: '/tasks',
   roles: '/roles',
-  auditLogs: '/audit-logs',
   settings: '/settings',
 } as const satisfies Record<NavPage, string>
 
@@ -31,7 +29,6 @@ export const NAV_TITLES: Record<NavPage, string> = {
   attendance: 'الحضور والانصراف',
   tasks: 'المهام الخارجية',
   roles: 'الأدوار والصلاحيات',
-  auditLogs: 'سجل التغييرات',
   settings: 'الإعدادات',
 }
 
@@ -46,7 +43,6 @@ export const NAV_PERMISSIONS: Record<NavPage, readonly Permission[] | null> = {
   attendance: ['attendance.readAll'],
   tasks: ['attendance.readAll'],
   roles: ['role.readAll', 'role.create', 'role.update', 'role.delete'],
-  auditLogs: ['auditLog.read'],
   settings: null,
 }
 

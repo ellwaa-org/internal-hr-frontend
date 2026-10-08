@@ -12,7 +12,6 @@ const DEVICE_KEY = 'hr_device_id'
 import { ApiError, isNotFoundError, translateErrorMessage } from './errors'
 import { notify } from './toast'
 import {
-
   changePasswordSchema,
   createDepartmentSchema,
   createOfficeSchema,
@@ -20,7 +19,6 @@ import {
   exportAttendanceExcelParamsSchema,
   listAttendanceParamsSchema,
   listAttendanceUsersParamsSchema,
-  listAuditLogsParamsSchema,
   listDepartmentsParamsSchema,
   listOfficesParamsSchema,
   listRolesParamsSchema,
@@ -41,9 +39,6 @@ import {
   type AttendanceType,
   type AttendanceUserItem,
   type AttendanceUserStatus,
-  type AuditAction,
-  type AuditLog,
-  type PaginatedAuditLogs,
   type ChangePasswordInput,
   type DeviceSecurityLog,
   type CreateDepartmentInput,
@@ -56,7 +51,6 @@ import {
   type JustificationStatus,
   type ListAttendanceParams,
   type ListAttendanceUsersParams,
-  type ListAuditLogsParams,
   type ListDepartmentsParams,
   type ListOfficesParams,
   type ListRolesParams,
@@ -93,9 +87,6 @@ export type {
   AttendanceType,
   AttendanceUserItem,
   AttendanceUserStatus,
-  AuditAction,
-  AuditLog,
-  PaginatedAuditLogs,
   DeviceSecurityLog,
   ChangePasswordInput,
   CreateDepartmentInput,
@@ -108,7 +99,6 @@ export type {
   JustificationStatus,
   ListAttendanceParams,
   ListAttendanceUsersParams,
-  ListAuditLogsParams,
   ListDepartmentsParams,
   ListOfficesParams,
   ListRolesParams,
@@ -1749,52 +1739,5 @@ export function getUserAttendanceSecurityLogs(
   user: SecurityLogFallback,
 ): Promise<AttendanceSecurityLog> {
   return fetchUserSecurityLog(token, `/security-logs/attendance/${user.id}`, user)
-}
-
-/* ---------- Audit logs ---------- */
-
-function asSnapshot(raw: unknown): Record<string, unknown> | null {
-  return raw && typeof raw === 'object' && !Array.isArray(raw)
-    ? (raw as Record<string, unknown>)
-    : null
-}
-
-/** Defensive per-entry mapping — one malformed row must not empty the page. */
-function asAuditLog(raw: Record<string, unknown>): AuditLog {
-  const actor = asRecord(raw.actor)
-  return {
-    id: String(raw.id ?? ''),
-    userId: pickNumber(raw.userId),
-    actor: actor
-      ? {
-          id: pickNumber(actor.id),
-          employeeCode: pickString(actor.employeeCode),
-          role: pickString(actor.role),
-        }
-      : null,
-    // Unknown future action values pass through and render with a neutral badge.
-    action: String(raw.action ?? ''),
-    module: String(raw.module ?? ''),
-    route: String(raw.route ?? ''),
-    entityId: raw.entityId == null ? null : String(raw.entityId),
-    before: asSnapshot(raw.before),
-    after: asSnapshot(raw.after),
-    ip: pickString(raw.ip),
-    createdAt: pickString(raw.createdAt) ?? '',
-    fullName: pickString(raw.fullName),
-    employeeCode: pickString(raw.employeeCode),
-  }
-}
-
-export async function listAuditLogs(
-  token: string,
-  params: ListAuditLogsParams = {},
-): Promise<PaginatedAuditLogs> {
-  const validated = parseOrThrow(listAuditLogsParamsSchema, params)
-  const page = validated.page ?? 1
-  const limit = validated.limit ?? 20
-  const qs = toQuery(validated)
-  const body = await request<unknown>(`/audit-logs${qs}`, {}, token)
-  return normalizePaginated(body, page, limit, ['data', 'auditLogs', 'items', 'results', 'logs'], asAuditLog)
 }
 
