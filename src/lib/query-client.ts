@@ -102,4 +102,17 @@ export const queryKeys = {
     attendance: (userId: number) =>
       [...queryKeys.securityLogs.all, 'attendance', userId] as const,
   },
+  auditLogs: {
+    all: ['audit-logs'] as const,
+    list: (params: {
+      page: number
+      limit: number
+      action?: string
+      module?: string
+      route?: string
+      userId?: number
+      from?: string
+      to?: string
+    }) => [...queryKeys.auditLogs.all, 'list', params] as const,
+  },
 }
