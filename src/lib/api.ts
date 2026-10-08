@@ -9,19 +9,16 @@ const API_BASE = (
 const TOKEN_KEY = 'hr_access_token'
 const DEVICE_KEY = 'hr_device_id'
 
-import { ApiError, isNotFoundError, translateErrorMessage } from './errors'
-import { notify } from './toast'
+import { isNotFoundError, translateErrorMessage } from './errors'
 import {
   changePasswordSchema,
   createDepartmentSchema,
   createOfficeSchema,
-  createRoleSchema,
   exportAttendanceExcelParamsSchema,
   listAttendanceParamsSchema,
   listAttendanceUsersParamsSchema,
   listDepartmentsParamsSchema,
   listOfficesParamsSchema,
-  listRolesParamsSchema,
   listUsersParamsSchema,
   loginSchema,
   parseOrThrow,
@@ -29,7 +26,6 @@ import {
   resetPasswordSchema,
   updateDepartmentSchema,
   updateOfficeSchema,
-  updateRoleSchema,
   updateUserSchema,
   updateFieldTaskSchema,
   endFieldTaskSchema,
@@ -43,7 +39,6 @@ import {
   type DeviceSecurityLog,
   type CreateDepartmentInput,
   type CreateOfficeInput,
-  type CreateRoleInput,
   type DayStatus,
   type DepartmentOption,
   type DepartmentRecord,
@@ -53,7 +48,6 @@ import {
   type ListAttendanceUsersParams,
   type ListDepartmentsParams,
   type ListOfficesParams,
-  type ListRolesParams,
   type ListUsersParams,
   type LoginInput,
   type OfficeOption,
@@ -62,18 +56,14 @@ import {
   type PaginatedAttendanceUsers,
   type PaginatedDepartments,
   type PaginatedOffices,
-  type PaginatedRoles,
   type PaginatedUsers,
   type Profile,
   type RegisterUserInput,
   type ResetPasswordInput,
   type Role,
-  type RoleOption,
-  type RoleRecord,
   type SecurityLogAttempt,
   type UpdateDepartmentInput,
   type UpdateOfficeInput,
-  type UpdateRoleInput,
   type UpdateUserInput,
   type UpdateFieldTaskInput,
   type EndFieldTaskInput,
@@ -91,7 +81,6 @@ export type {
   ChangePasswordInput,
   CreateDepartmentInput,
   CreateOfficeInput,
-  CreateRoleInput,
   DayStatus,
   DepartmentOption,
   DepartmentRecord,
@@ -101,7 +90,6 @@ export type {
   ListAttendanceUsersParams,
   ListDepartmentsParams,
   ListOfficesParams,
-  ListRolesParams,
   ListUsersParams,
   LoginInput,
   OfficeOption,
@@ -110,18 +98,14 @@ export type {
   PaginatedAttendanceUsers,
   PaginatedDepartments,
   PaginatedOffices,
-  PaginatedRoles,
   PaginatedUsers,
   Profile,
   RegisterUserInput,
   ResetPasswordInput,
   Role,
-  RoleOption,
-  RoleRecord,
   SecurityLogAttempt,
   UpdateDepartmentInput,
   UpdateOfficeInput,
-  UpdateRoleInput,
   UpdateUserInput,
   UpdateFieldTaskInput,
   EndFieldTaskInput,
@@ -160,22 +144,6 @@ function errorMessageFromBody(body: unknown, fallback: string, status?: number):
   return translateErrorMessage(raw, status)
 }
 
-let lastForbiddenToastAt = 0
-const FORBIDDEN_TOAST_THROTTLE_MS = 2500
-
-/**
- * Global 403 handling: the user is authenticated but lacks the permission —
- * show a toast and keep the session. Throttled so a burst of failing queries
- * doesn't spam toasts.
- */
-function notifyForbidden(status: number, message: string) {
-  if (status !== 403) return
-  const now = Date.now()
-  if (now - lastForbiddenToastAt < FORBIDDEN_TOAST_THROTTLE_MS) return
-  lastForbiddenToastAt = now
-  notify.error(new Error(message), 'لا تملك صلاحية تنفيذ هذا الإجراء.')
-}
-
 async function request<T>(
   path: string,
   init: RequestInit = {},
@@ -197,8 +165,7 @@ async function request<T>(
     } catch {
       // non-JSON error body, keep default message
     }
-    notifyForbidden(res.status, message)
-    throw new ApiError(message, res.status)
+    throw new Error(message)
   }
 
   if (res.status === 204) return undefined as T
@@ -321,7 +288,6 @@ export async function getProfile(token: string): Promise<Profile> {
     phoneNumber: user.phoneNumber,
     email: user.email,
     role: user.role,
-    permissions: user.permissions,
     employeeCode: user.employeeCode,
     deviceId: user.deviceId,
     points: user.points,
@@ -374,12 +340,6 @@ function asNestedOption(
   }
 }
 
-/** Permissions are returned by auth endpoints as string[]; unknown shapes → []. */
-function asPermissionList(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return []
-  return raw.filter((item): item is string => typeof item === 'string' && item.length > 0)
-}
-
 function asUserRecord(raw: Record<string, unknown>): UserRecord {
   const department = asNestedOption(raw.department)
   const nestedOffices = Array.isArray(raw.offices)
@@ -413,8 +373,7 @@ function asUserRecord(raw: Record<string, unknown>): UserRecord {
     fullName: String(raw.fullName ?? raw.name ?? raw.userName ?? ''),
     phoneNumber: String(raw.phoneNumber ?? ''),
     email: (raw.email as string | null) ?? null,
-    role: typeof raw.role === 'string' && raw.role.trim() ? raw.role : 'EMPLOYEE',
-    permissions: asPermissionList(raw.permissions),
+    role: (raw.role as Role) ?? 'EMPLOYEE',
     employeeCode: String(raw.employeeCode ?? raw.code ?? ''),
     deviceId: (raw.deviceId as string | null) ?? null,
     points: Number(raw.points ?? 0),
@@ -991,94 +950,6 @@ export function resetUserDevice(token: string, userId: number): Promise<unknown>
   )
 }
 
-/* ---------- Roles (permission-based RBAC) ---------- */
-
-function asRoleRecord(raw: Record<string, unknown>): RoleRecord {
-  return {
-    id: Number(raw.id),
-    name: String(raw.name ?? ''),
-    description: raw.description == null || raw.description === '' ? null : String(raw.description),
-    permissions: asPermissionList(raw.permissions),
-    isSystem: Boolean(raw.isSystem ?? false),
-    userCount: Number(raw.userCount ?? 0),
-    createdAt: (raw.createdAt as string | null | undefined) ?? undefined,
-    updatedAt: (raw.updatedAt as string | null | undefined) ?? undefined,
-  }
-}
-
-/** Full permission catalog for the role editor. Requires auth, no specific permission. */
-export async function listPermissionCatalog(token: string): Promise<string[]> {
-  const body = await request<{ permissions?: unknown }>('/roles/permissions', {}, token)
-  return asPermissionList(body?.permissions)
-}
-
-export async function listRoles(
-  token: string,
-  params: ListRolesParams = {},
-): Promise<PaginatedRoles> {
-  const validated = parseOrThrow(listRolesParamsSchema, params)
-  const page = validated.page ?? 1
-  const limit = validated.limit ?? 10
-  const qs = toQuery({
-    page,
-    limit,
-    search: validated.search,
-  })
-  const body = await request<unknown>(`/roles${qs}`, {}, token)
-  return normalizePaginated(
-    body,
-    page,
-    limit,
-    ['data', 'roles', 'items', 'results'],
-    asRoleRecord,
-  )
-}
-
-/** Flat options list for selects — fetches a large page. Requires role.readAll. */
-export async function listRoleOptions(
-  token: string,
-  params: { page?: number; limit?: number; search?: string } = {},
-): Promise<RoleOption[]> {
-  const result = await listRoles(token, {
-    page: params.page ?? 1,
-    limit: params.limit ?? 100,
-    search: params.search,
-  })
-  return result.data.map((item) => ({ id: item.id, name: item.name }))
-}
-
-export function createRole(token: string, input: CreateRoleInput): Promise<RoleRecord | unknown> {
-  const payload = parseOrThrow(createRoleSchema, input)
-  return request(
-    '/roles',
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-    token,
-  )
-}
-
-export function updateRole(
-  token: string,
-  id: number,
-  input: UpdateRoleInput,
-): Promise<RoleRecord | unknown> {
-  const payload = parseOrThrow(updateRoleSchema, input)
-  return request(
-    `/roles/${id}`,
-    {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    },
-    token,
-  )
-}
-
-export function deleteRole(token: string, id: number): Promise<unknown> {
-  return request(`/roles/${id}`, { method: 'DELETE' }, token)
-}
-
 export async function listDepartments(
   token: string,
   params: ListDepartmentsParams = {},
@@ -1503,8 +1374,7 @@ async function downloadBinary(
     } catch {
       // non-JSON error body
     }
-    notifyForbidden(res.status, message)
-    throw new ApiError(message, res.status)
+    throw new Error(message)
   }
 
   const blob = await res.blob()

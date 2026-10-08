@@ -23,9 +23,8 @@ import {
   type DepartmentRecord,
   type UserRecord,
 } from '@/lib/api'
-import { isForbiddenError, isUnauthorizedError } from '@/lib/errors'
+import { isUnauthorizedError } from '@/lib/errors'
 import { queryKeys, QUERY_STALE_TIME_DEFAULT } from '@/lib/query-client'
-import { hasPermission, roleLabel } from '@/lib/permissions'
 import { createDepartmentSchema, zodErrorMessage } from '@/lib/schemas'
 import { notify } from '@/lib/toast'
 import { useDialogState } from '@/lib/use-dialog-state'
@@ -77,11 +76,9 @@ type ModalMode =
 
 function DepartmentsPage({
   token,
-  permissions,
   onUnauthorized,
 }: {
   token: string
-  permissions: string[]
   onUnauthorized: () => void
 }) {
   const queryClient = useQueryClient()
@@ -95,15 +92,8 @@ function DepartmentsPage({
   const [membersSearch, setMembersSearch] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
 
-  const canCreate = hasPermission(permissions, 'department.create')
-  const canUpdate = hasPermission(permissions, 'department.update')
-  const canDelete = hasPermission(permissions, 'department.delete')
-  const canAssign = hasPermission(permissions, 'department.assign')
-
   const handleApiError = useCallback(
     (err: unknown, fallback: string) => {
-      // 403 = missing permission: already toasted globally, session stays alive.
-      if (isForbiddenError(err)) return
       if (isUnauthorizedError(err)) {
         notify.error(err, 'انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.')
         onUnauthorized()
@@ -367,12 +357,10 @@ function DepartmentsPage({
         title="الإدارات"
         subtitle="إنشاء الإدارات وتعيين الموظفين لها"
         action={
-          canCreate ? (
-            <Button type="button" onClick={openCreate} variant="primary" fullOnMobile>
-              <Plus />
-              إضافة إدارة
-            </Button>
-          ) : undefined
+          <Button type="button" onClick={openCreate} variant="primary" fullOnMobile>
+            <Plus />
+            إضافة إدارة
+          </Button>
         }
       />
 
@@ -467,50 +455,40 @@ function DepartmentsPage({
                       </button>
                     </Td>
                     <TdActions>
-                      {canUpdate || canDelete ? (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="sm"
-                              className="h-8 w-8 p-0"
-                              aria-label={`إجراءات ${dept.name}`}
-                              title="إجراءات"
-                            >
-                              <MoreHorizontal />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="min-w-60">
-                            <DropdownMenuLabel>{dept.name}</DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-                            {canUpdate && (
-                              <DropdownMenuItem onSelect={() => openEdit(dept)}>
-                                <Pencil />
-                                تعديل الاسم
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem onSelect={() => openMembers(dept)}>
-                              <UserPlus />
-                              إدارة الموظفين
-                            </DropdownMenuItem>
-                            {canDelete && (
-                              <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  variant="danger"
-                                  onSelect={() => setModal({ type: 'delete', department: dept })}
-                                >
-                                  <Trash2 />
-                                  حذف
-                                </DropdownMenuItem>
-                              </>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      ) : (
-                        <span className="text-muted">—</span>
-                      )}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            aria-label={`إجراءات ${dept.name}`}
+                            title="إجراءات"
+                          >
+                            <MoreHorizontal />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="min-w-60">
+                          <DropdownMenuLabel>{dept.name}</DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onSelect={() => openEdit(dept)}>
+                            <Pencil />
+                            تعديل الاسم
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => openMembers(dept)}>
+                            <UserPlus />
+                            إدارة الموظفين
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            variant="danger"
+                            onSelect={() => setModal({ type: 'delete', department: dept })}
+                          >
+                            <Trash2 />
+                            حذف
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TdActions>
                   </Tr>
                 )
@@ -703,41 +681,39 @@ function DepartmentsPage({
                 </DialogDescription>
               </DialogHeader>
               <DialogBody>
-                {canAssign && (
-                  <div className="flex flex-wrap items-end gap-2.5 max-[720px]:flex-col max-[720px]:items-stretch [&_button]:max-[720px]:w-full">
-                    <div className="flex min-w-[min(100%,320px)] flex-1 flex-col gap-1.5 text-[13px] text-muted">
-                      <span>تعيين / إعادة تعيين موظف</span>
-                      <SearchableSelect
-                        value={assignUserId || undefined}
-                        onValueChange={setAssignUserId}
-                        aria-label="الموظف"
-                        placeholder="اختر موظفاً"
-                        searchPlaceholder="بحث بالاسم أو الكود..."
-                        emptyText="لا يوجد موظف مطابق"
-                        options={assignCandidates.map((u) => ({
-                          value: String(u.id),
-                          label: `${u.fullName} (${u.employeeCode})${
-                            u.department?.name ? ` — ${u.department.name}` : ''
-                          }`,
-                          keywords: `${u.fullName} ${u.employeeCode} ${u.department?.name ?? ''}`,
-                        }))}
-                      />
-                    </div>
-                    <Button
-                      type="button"
-                      disabled={busy || !assignUserId}
-                      onClick={() => {
-                        const data = membersDialog.data
-                        if (!data) return
-                        requestAssign(data.department)
-                      }}
-                      variant="primary"
-                    >
-                      <UserPlus />
-                      تعيين
-                    </Button>
+                <div className="flex flex-wrap items-end gap-2.5 max-[720px]:flex-col max-[720px]:items-stretch [&_button]:max-[720px]:w-full">
+                  <div className="flex min-w-[min(100%,320px)] flex-1 flex-col gap-1.5 text-[13px] text-muted">
+                    <span>تعيين / إعادة تعيين موظف</span>
+                    <SearchableSelect
+                      value={assignUserId || undefined}
+                      onValueChange={setAssignUserId}
+                      aria-label="الموظف"
+                      placeholder="اختر موظفاً"
+                      searchPlaceholder="بحث بالاسم أو الكود..."
+                      emptyText="لا يوجد موظف مطابق"
+                      options={assignCandidates.map((u) => ({
+                        value: String(u.id),
+                        label: `${u.fullName} (${u.employeeCode})${
+                          u.department?.name ? ` — ${u.department.name}` : ''
+                        }`,
+                        keywords: `${u.fullName} ${u.employeeCode} ${u.department?.name ?? ''}`,
+                      }))}
+                    />
                   </div>
-                )}
+                  <Button
+                    type="button"
+                    disabled={busy || !assignUserId}
+                    onClick={() => {
+                      const data = membersDialog.data
+                      if (!data) return
+                      requestAssign(data.department)
+                    }}
+                    variant="primary"
+                  >
+                    <UserPlus />
+                    تعيين
+                  </Button>
+                </div>
                 {formError && <p className="col-span-full m-0 text-[13px] font-semibold text-red-700">{formError}</p>}
 
                 <SearchField
@@ -761,29 +737,27 @@ function DepartmentsPage({
                           <span className="font-semibold text-foreground">{user.fullName}</span>
                           <span className="text-xs text-muted">
                             {user.employeeCode}
-                            {user.role ? ` · ${roleLabel(user.role)}` : ''}
+                            {user.role ? ` · ${user.role}` : ''}
                           </span>
                         </div>
-                        {canAssign && (
-                          <Button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => {
-                              const data = membersDialog.data
-                              if (!data) return
-                              setModal({
-                                type: 'confirm-unassign',
-                                department: data.department,
-                                user,
-                              })
-                            }}
-                            variant="secondary"
-                            size="sm"
-                          >
-                            <UserMinus />
-                            إزالة
-                          </Button>
-                        )}
+                        <Button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            const data = membersDialog.data
+                            if (!data) return
+                            setModal({
+                              type: 'confirm-unassign',
+                              department: data.department,
+                              user,
+                            })
+                          }}
+                          variant="secondary"
+                          size="sm"
+                        >
+                          <UserMinus />
+                          إزالة
+                        </Button>
                       </div>
                     ))
                   )}

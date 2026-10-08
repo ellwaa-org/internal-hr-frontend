@@ -1,14 +1,3 @@
-/** Error thrown by the API layer carrying the HTTP status code. */
-export class ApiError extends Error {
-  readonly status?: number
-
-  constructor(message: string, status?: number) {
-    super(message)
-    this.name = 'ApiError'
-    this.status = status
-  }
-}
-
 const STATUS_MESSAGES: Record<number, string> = {
   400: 'طلب غير صالح. تحقق من البيانات المدخلة.',
   401: 'انتهت الجلسة أو بيانات الدخول غير صحيحة.',
@@ -24,10 +13,9 @@ const STATUS_MESSAGES: Record<number, string> = {
 
 const MESSAGE_MAP: Array<[RegExp, string]> = [
   [/unauthorized|401/i, 'انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.'],
-  [/forbidden|403|do not have permission|permission denied|insufficient permissions?/i, 'لا تملك صلاحية تنفيذ هذا الإجراء.'],
+  [/forbidden|403/i, 'لا تملك صلاحية تنفيذ هذا الإجراء.'],
   [/not found|404/i, 'العنصر المطلوب غير موجود.'],
   [/user not found/i, 'المستخدم غير موجود.'],
-  [/unknown role/i, 'الدور المحدد غير موجود في النظام.'],
   [/current password.*(incorrect|invalid|wrong)|incorrect current password|wrong current password|old password.*(incorrect|invalid|wrong)/i, 'كلمة المرور الحالية غير صحيحة.'],
   [/password.*(same|identical|unchanged)|same password/i, 'كلمة المرور الجديدة يجب أن تختلف عن الحالية.'],
   [/passwords?.*(match|mismatch|do not match|don't match)/i, 'كلمتا المرور غير متطابقتين.'],
@@ -73,19 +61,8 @@ export function errorMessageFromUnknown(err: unknown, fallback = 'حدث خطأ 
 }
 
 export function isUnauthorizedError(err: unknown): boolean {
-  if (err instanceof ApiError) return err.status === 401
   const msg = err instanceof Error ? err.message : String(err)
   return /401|unauthorized|غير مصرح|انتهت الجلسة/i.test(msg)
-}
-
-/**
- * 403 = authenticated but lacking the permission. The user stays logged in;
- * callers must NOT treat this as a session expiry.
- */
-export function isForbiddenError(err: unknown): boolean {
-  if (err instanceof ApiError) return err.status === 403
-  const msg = err instanceof Error ? err.message : String(err)
-  return /403|forbidden|لا تملك صلاحية/i.test(msg)
 }
 
 export function isNotFoundError(err: unknown): boolean {
