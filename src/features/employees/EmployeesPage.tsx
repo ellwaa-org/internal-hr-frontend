@@ -19,6 +19,7 @@ import {
   deleteUser,
   listDepartmentOptions,
   listOfficeOptions,
+  listRoleOptions,
   listUsers,
   officeIdsOf,
   officeNamesOf,
@@ -31,12 +32,13 @@ import {
   type DepartmentOption,
   type OfficeOption,
   type RegisterUserInput,
-  type Role,
+  type RoleOption,
   type UpdateUserInput,
   type UserRecord,
 } from '@/lib/api'
-import { isUnauthorizedError } from '@/lib/errors'
+import { isForbiddenError, isUnauthorizedError } from '@/lib/errors'
 import { queryKeys, QUERY_STALE_TIME_FREQUENT } from '@/lib/query-client'
+import { hasPermission, roleLabel } from '@/lib/permissions'
 import {
   registerUserSchema,
   resetPasswordSchema,
@@ -50,6 +52,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
+import { SearchableSelect } from '@/components/ui/searchable-select'
 import {
   FiltersBar,
   PageHeader,
@@ -84,12 +87,6 @@ import {
 } from '@/components/ui/select'
 import { SecurityLogsDialog } from '@/features/employees/SecurityLogsDialog'
 
-const ROLE_LABELS: Record<Role, string> = {
-  ADMIN: 'مدير النظام',
-  HR: 'موارد بشرية',
-  EMPLOYEE: 'موظف',
-}
-
 type UpdatePayload = UpdateUserInput
 
 type ModalMode =
@@ -117,22 +114,38 @@ const CONFIRM_LOADING: Record<ConfirmAction, string> = {
 
 function EmployeesPage({
   token,
+  permissions,
   onUnauthorized,
 }: {
   token: string
+  permissions: string[]
   onUnauthorized: () => void
 }) {
   const queryClient = useQueryClient()
   const [page, setPage] = usePageParam()
   const [limit] = useState(20)
   const [search, setSearch] = useState('')
-  const [roleFilter, setRoleFilter] = useState<'all' | Role>('all')
+  const [roleFilter, setRoleFilter] = useState<'all' | string>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
   const [modal, setModal] = useState<ModalMode>(null)
   const [busy, setBusy] = useState(false)
 
+  // Action visibility is decided by permissions only — never by role name.
+  const canCreate = hasPermission(permissions, 'user.create')
+  const canUpdate = hasPermission(permissions, 'user.update')
+  const canToggleStatus = hasPermission(permissions, 'user.toggleStatus')
+  const canDelete = hasPermission(permissions, 'user.delete')
+  const canResetPassword = hasPermission(permissions, 'user.resetPassword')
+  const canResetDevice = hasPermission(permissions, 'user.resetDevice')
+  const canReadSecurityLogs = hasPermission(permissions, 'securityLog.read')
+  const canListRoles = hasPermission(permissions, 'role.readAll')
+  const hasRowActions =
+    canUpdate || canToggleStatus || canDelete || canResetPassword || canResetDevice || canReadSecurityLogs
+
   const handleApiError = useCallback(
     (err: unknown, fallback: string) => {
+      // 403 = missing permission: already toasted globally, session stays alive.
+      if (isForbiddenError(err)) return
       if (isUnauthorizedError(err)) {
         notify.error(err, 'انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.')
         onUnauthorized()
@@ -182,6 +195,14 @@ function EmployeesPage({
     queryFn: () => listOfficeOptions(token, { limit: 100 }),
   })
 
+  // Role options require role.readAll; without it the filter falls back to "all".
+  const rolesOptionsQuery = useQuery({
+    queryKey: queryKeys.roles.options(),
+    staleTime: QUERY_STALE_TIME_FREQUENT,
+    enabled: canListRoles,
+    queryFn: () => listRoleOptions(token, { limit: 100 }),
+  })
+
   useEffect(() => {
     if (usersQuery.error) {
       handleApiError(usersQuery.error, 'تعذر تحميل قائمة الموظفين')
@@ -194,6 +215,7 @@ function EmployeesPage({
   const loading = usersQuery.isLoading || (usersQuery.isFetching && users.length === 0)
   const departments = departmentsQuery.data ?? []
   const offices = officesQuery.data ?? []
+  const roleOptions = rolesOptionsQuery.data ?? []
 
   const invalidateUsers = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: queryKeys.users.all })
@@ -305,21 +327,23 @@ function EmployeesPage({
         title="الموظفون"
         subtitle="إدارة حسابات الموظفين والصلاحيات"
         action={
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              onClick={() => setModal({ type: 'restore' })}
-              variant="secondary"
-              fullOnMobile
-            >
-              <ArchiveRestore />
-              استعادة موظف محذوف
-            </Button>
-            <Button type="button" onClick={() => setModal({ type: 'create' })} variant="primary" fullOnMobile>
-              <Plus />
-              إضافة موظف
-            </Button>
-          </div>
+          canCreate ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                onClick={() => setModal({ type: 'restore' })}
+                variant="secondary"
+                fullOnMobile
+              >
+                <ArchiveRestore />
+                استعادة موظف محذوف
+              </Button>
+              <Button type="button" onClick={() => setModal({ type: 'create' })} variant="primary" fullOnMobile>
+                <Plus />
+                إضافة موظف
+              </Button>
+            </div>
+          ) : undefined
         }
       />
 
@@ -333,23 +357,27 @@ function EmployeesPage({
           }}
         />
 
-        <Select
-          value={roleFilter}
-          onValueChange={(value) => {
-            setPage(1)
-            setRoleFilter(value as 'all' | Role)
-          }}
-        >
-          <SelectTrigger className="min-w-[150px] max-[720px]:w-full max-[720px]:min-w-0" aria-label="تصفية حسب الدور">
-            <SelectValue placeholder="كل الأدوار" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">كل الأدوار</SelectItem>
-            <SelectItem value="ADMIN">مدير النظام</SelectItem>
-            <SelectItem value="HR">موارد بشرية</SelectItem>
-            <SelectItem value="EMPLOYEE">موظف</SelectItem>
-          </SelectContent>
-        </Select>
+        {canListRoles && roleOptions.length > 0 && (
+          <Select
+            value={roleFilter}
+            onValueChange={(value) => {
+              setPage(1)
+              setRoleFilter(value)
+            }}
+          >
+            <SelectTrigger className="min-w-[150px] max-[720px]:w-full max-[720px]:min-w-0" aria-label="تصفية حسب الدور">
+              <SelectValue placeholder="كل الأدوار" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">كل الأدوار</SelectItem>
+              {roleOptions.map((r) => (
+                <SelectItem key={r.id} value={r.name}>
+                  {roleLabel(r.name)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
 
         <Select
           value={statusFilter}
@@ -459,7 +487,7 @@ function EmployeesPage({
                       {user.employeeCode}
                     </code>
                   </Td>
-                  <Td className="whitespace-nowrap">{ROLE_LABELS[user.role]}</Td>
+                  <Td className="whitespace-nowrap">{roleLabel(user.role)}</Td>
                   <Td className="whitespace-nowrap text-muted">{user.phoneNumber || '—'}</Td>
                   <Td>
                     <span className="block max-w-[240px] truncate text-muted" title={user.email || undefined}>
@@ -479,64 +507,82 @@ function EmployeesPage({
                   <Td className="tabular-nums">{user.points}</Td>
                   <Td className="text-muted">{user.deviceId ? 'مربوط' : '—'}</Td>
                   <TdActions>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          className="h-8 w-8 p-0"
-                          aria-label={`إجراءات ${user.fullName}`}
-                          title="إجراءات"
-                        >
-                          <MoreHorizontal />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="min-w-60">
-                        <DropdownMenuLabel>
-                          {user.fullName} • {user.employeeCode}
-                        </DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onSelect={() => setModal({ type: 'update', user })}>
-                          <Pencil />
-                          تحديث
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onSelect={() => setModal({ type: 'confirm', action: 'toggle', user })}
-                        >
-                          <Power />
-                          {user.isActive ? 'إيقاف' : 'تفعيل'}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onSelect={() => setModal({ type: 'reset-password', user })}
-                        >
-                          <KeyRound />
-                          إعادة تعيين كلمة المرور
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onSelect={() =>
-                            setModal({ type: 'confirm', action: 'reset-device', user })
-                          }
-                        >
-                          <Smartphone />
-                          إعادة تعيين الجهاز
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onSelect={() => setModal({ type: 'security-logs', user })}
-                        >
-                          <ShieldAlert />
-                          سجلات الأمان
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          variant="danger"
-                          onSelect={() => setModal({ type: 'confirm', action: 'delete', user })}
-                        >
-                          <Trash2 />
-                          حذف
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    {hasRowActions ? (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            aria-label={`إجراءات ${user.fullName}`}
+                            title="إجراءات"
+                          >
+                            <MoreHorizontal />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="min-w-60">
+                          <DropdownMenuLabel>
+                            {user.fullName} • {user.employeeCode}
+                          </DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          {canUpdate && (
+                            <DropdownMenuItem onSelect={() => setModal({ type: 'update', user })}>
+                              <Pencil />
+                              تحديث
+                            </DropdownMenuItem>
+                          )}
+                          {canToggleStatus && (
+                            <DropdownMenuItem
+                              onSelect={() => setModal({ type: 'confirm', action: 'toggle', user })}
+                            >
+                              <Power />
+                              {user.isActive ? 'إيقاف' : 'تفعيل'}
+                            </DropdownMenuItem>
+                          )}
+                          {canResetPassword && (
+                            <DropdownMenuItem
+                              onSelect={() => setModal({ type: 'reset-password', user })}
+                            >
+                              <KeyRound />
+                              إعادة تعيين كلمة المرور
+                            </DropdownMenuItem>
+                          )}
+                          {canResetDevice && (
+                            <DropdownMenuItem
+                              onSelect={() =>
+                                setModal({ type: 'confirm', action: 'reset-device', user })
+                              }
+                            >
+                              <Smartphone />
+                              إعادة تعيين الجهاز
+                            </DropdownMenuItem>
+                          )}
+                          {canReadSecurityLogs && (
+                            <DropdownMenuItem
+                              onSelect={() => setModal({ type: 'security-logs', user })}
+                            >
+                              <ShieldAlert />
+                              سجلات الأمان
+                            </DropdownMenuItem>
+                          )}
+                          {canDelete && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                variant="danger"
+                                onSelect={() => setModal({ type: 'confirm', action: 'delete', user })}
+                              >
+                                <Trash2 />
+                                حذف
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    ) : (
+                      <span className="text-muted">—</span>
+                    )}
                   </TdActions>
                 </Tr>
               ))
@@ -636,6 +682,7 @@ function EmployeesPage({
               mode="create"
               departments={departments}
               offices={offices}
+              roleOptions={roleOptions}
               busy={busy}
               onClose={closeModal}
               onSubmit={async (payload) => {
@@ -864,6 +911,7 @@ function EmployeeFormDialog({
   draft,
   departments,
   offices,
+  roleOptions,
   busy,
   onClose,
   onSubmit,
@@ -874,11 +922,13 @@ function EmployeeFormDialog({
   draft?: UpdatePayload
   departments: DepartmentOption[]
   offices: OfficeOption[]
+  roleOptions?: RoleOption[]
   busy: boolean
   onClose: () => void
   onSubmit?: (payload: FormPayload) => Promise<void>
   onRequestConfirm?: (update: UpdatePayload) => void
 }) {
+  const availableRoles = roleOptions ?? []
   const [fullName, setFullName] = useState(draft?.fullName ?? user?.fullName ?? '')
   const [employeeCode, setEmployeeCode] = useState(
     draft?.employeeCode ?? user?.employeeCode ?? '',
@@ -890,7 +940,7 @@ function EmployeeFormDialog({
     (draft?.email ?? user?.email ?? '') as string,
   )
   const [password, setPassword] = useState('4444')
-  const [role, setRole] = useState<Role>(user?.role ?? 'EMPLOYEE')
+  const [role, setRole] = useState<string>(user?.role ?? 'EMPLOYEE')
   const [bio, setBio] = useState(
     (draft?.bio ?? user?.bio ?? '') as string,
   )
@@ -1013,16 +1063,33 @@ function EmployeeFormDialog({
               </label>
               <div className="flex flex-col gap-1.5 text-[13px] text-muted">
                 <span>الدور *</span>
-                <Select value={role} onValueChange={(value) => setRole(value as Role)}>
-                  <SelectTrigger className="w-full" aria-label="الدور">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="EMPLOYEE">موظف</SelectItem>
-                    <SelectItem value="HR">موارد بشرية</SelectItem>
-                    <SelectItem value="ADMIN">مدير النظام</SelectItem>
-                  </SelectContent>
-                </Select>
+                {availableRoles.length > 0 ? (
+                  <SearchableSelect
+                    value={availableRoles.some((r) => r.name === role) ? role : undefined}
+                    onValueChange={setRole}
+                    options={availableRoles.map((r) => ({
+                      value: r.name,
+                      label: roleLabel(r.name) === r.name ? r.name : `${roleLabel(r.name)} (${r.name})`,
+                    }))}
+                    placeholder="اختر الدور"
+                    searchPlaceholder="بحث باسم الدور..."
+                    emptyText="لا توجد أدوار"
+                    aria-label="الدور"
+                  />
+                ) : (
+                  <Input
+                    value={role}
+                    onChange={(e) => setRole(e.target.value)}
+                    placeholder="اسم الدور كما هو في النظام"
+                    dir="ltr"
+                    className="text-start"
+                  />
+                )}
+                {availableRoles.length === 0 && (
+                  <span className="text-xs text-muted">
+                    أدخل اسم دور موجود (مثال: EMPLOYEE). تواصل مع المسؤول للاطلاع على قائمة الأدوار.
+                  </span>
+                )}
               </div>
             </>
           )}

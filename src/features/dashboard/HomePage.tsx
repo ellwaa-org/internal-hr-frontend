@@ -1,26 +1,32 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import {
-  Building2,
   Briefcase,
+  Building2,
   CalendarCheck,
   ChevronUp,
   LogOut,
   MapPin,
+  RefreshCw,
   Settings,
+  ShieldAlert,
+  ShieldCheck,
   Users,
 } from 'lucide-react'
 import { Navigate, NavLink, Outlet, Route, Routes, useLocation } from 'react-router-dom'
-import { clearToken, getProfile, type Profile, type Role } from '@/lib/api'
+import { clearToken, getProfile, type Profile } from '@/lib/api'
 import { isUnauthorizedError } from '@/lib/errors'
-import { NAV_PATHS, NAV_TITLES, navPageFromPath } from '@/lib/nav'
+import { NAV_PATHS, NAV_TITLES, canAccessNavPage, firstAllowedPage, navPageFromPath, type NavPage } from '@/lib/nav'
+import { roleLabel } from '@/lib/permissions'
 import { notify } from '@/lib/toast'
 import AttendancePage from '@/features/attendance/AttendancePage'
 import DepartmentsPage from '@/features/departments/DepartmentsPage'
 import EmployeesPage from '@/features/employees/EmployeesPage'
 import OfficesPage from '@/features/offices/OfficesPage'
+import RolesPage from '@/features/roles/RolesPage'
 import SettingsPage from '@/features/settings/SettingsPage'
 import TasksPage from '@/features/tasks/TasksPage'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -50,11 +56,20 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils'
 import logo from '@/assets/logo.webp'
 
-const ROLE_LABELS: Record<Role, string> = {
-  ADMIN: 'مدير النظام',
-  HR: 'موارد بشرية',
-  EMPLOYEE: 'موظف',
+const NAV_ICONS: Record<NavPage, typeof Users> = {
+  employees: Users,
+  departments: Building2,
+  offices: MapPin,
+  attendance: CalendarCheck,
+  tasks: Briefcase,
+  roles: ShieldCheck,
+  settings: Settings,
 }
+
+const NAV_GROUPS: { label: string; pages: NavPage[] }[] = [
+  { label: 'الرئيسية', pages: ['employees', 'departments', 'offices', 'roles'] },
+  { label: 'العمليات', pages: ['attendance', 'tasks', 'settings'] },
+]
 
 function initialsOf(name: string): string {
   return name
@@ -69,13 +84,17 @@ function initialsOf(name: string): string {
 function UserFooter({
   profile,
   onSignOut,
+  onRefreshPermissions,
+  refreshingPermissions,
 }: {
   profile: Profile | null
   onSignOut: () => void
+  onRefreshPermissions: () => void
+  refreshingPermissions: boolean
 }) {
   const { collapsed } = useSidebar()
   const name = profile?.fullName ?? 'الملف الشخصي'
-  const role = profile ? ROLE_LABELS[profile.role] : ''
+  const role = roleLabel(profile?.role)
 
   const trigger = (
     <DropdownMenuTrigger asChild>
@@ -124,6 +143,10 @@ function UserFooter({
           )}
         </div>
         <DropdownMenuSeparator />
+        <DropdownMenuItem disabled={refreshingPermissions} onSelect={onRefreshPermissions}>
+          <RefreshCw className={cn(refreshingPermissions && 'animate-spin')} />
+          تحديث الصلاحيات
+        </DropdownMenuItem>
         <DropdownMenuItem variant="danger" onSelect={onSignOut}>
           <LogOut />
           تسجيل الخروج
@@ -133,16 +156,74 @@ function UserFooter({
   )
 }
 
+function NoPermissionsScreen({ onSignOut }: { onSignOut: () => void }) {
+  return (
+    <div className="flex min-h-svh items-center justify-center bg-white p-6">
+      <div className="flex w-full max-w-[460px] flex-col items-center gap-4 rounded-2xl border border-border bg-white px-8 py-10 text-center shadow-card">
+        <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-warning-soft text-warning">
+          <ShieldAlert className="h-6 w-6" />
+        </span>
+        <h1 className="m-0 text-lg font-bold text-foreground">لا تملك أي صلاحيات</h1>
+        <p className="m-0 text-sm leading-relaxed text-muted">
+          حسابك مسجل في النظام لكن لم يُمنح أي صلاحيات بعد. تواصل مع المسؤول لمنح دور يحتوي على
+          الصلاحيات المناسبة.
+        </p>
+        <Button type="button" variant="secondary" onClick={onSignOut}>
+          <LogOut />
+          تسجيل الخروج
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/** Route guard — hides nothing from the URL bar, but blocks pages without permission. */
+function RequirePermission({
+  profile,
+  page,
+  children,
+}: {
+  profile: Profile
+  page: NavPage
+  children: ReactNode
+}) {
+  if (!canAccessNavPage(profile, page)) {
+    return (
+      <div className="m-6 max-w-[480px] rounded-2xl border border-border bg-white p-7 shadow-card">
+        <div className="mb-2 flex items-center gap-2 text-warning">
+          <ShieldAlert className="h-5 w-5" />
+          <span className="text-sm font-bold">403 — لا تملك صلاحية الوصول</span>
+        </div>
+        <p className="m-0 text-sm leading-relaxed text-muted">
+          لا تملك صلاحية عرض صفحة «{NAV_TITLES[page]}». تواصل مع المسؤول إذا كنت تعتقد أن هذا خطأ.
+        </p>
+        <a
+          className="mt-4 inline-flex h-10 items-center rounded-[10px] bg-neutral-900 px-4 text-sm font-semibold text-white no-underline"
+          href={NAV_PATHS[firstAllowedPage(profile)]}
+        >
+          العودة للصفحة الرئيسية
+        </a>
+      </div>
+    )
+  }
+  return <>{children}</>
+}
+
 function HomeShell({
   profile,
   onSignOut,
+  onRefreshPermissions,
+  refreshingPermissions,
 }: {
   profile: Profile
   onSignOut: () => void
+  onRefreshPermissions: () => void
+  refreshingPermissions: boolean
 }) {
   const { setOpenMobile } = useSidebar()
   const location = useLocation()
-  const page = navPageFromPath(location.pathname) ?? 'employees'
+  const fallbackPage = firstAllowedPage(profile)
+  const page = navPageFromPath(location.pathname) ?? fallbackPage
   const closeMobile = () => setOpenMobile(false)
 
   return (
@@ -162,67 +243,44 @@ function HomeShell({
 
         <SidebarContent>
           <SidebarMenu>
-            <SidebarGroup>
-              <SidebarGroupLabel>الرئيسية</SidebarGroupLabel>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={page === 'employees'} tooltip="الموظفون" onClick={closeMobile}>
-                  <NavLink to={NAV_PATHS.employees}>
-                    <Users />
-                    <SidebarLabel>الموظفون</SidebarLabel>
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={page === 'departments'} tooltip="الإدارات" onClick={closeMobile}>
-                  <NavLink to={NAV_PATHS.departments}>
-                    <Building2 />
-                    <SidebarLabel>الإدارات</SidebarLabel>
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={page === 'offices'} tooltip="المكاتب" onClick={closeMobile}>
-                  <NavLink to={NAV_PATHS.offices}>
-                    <MapPin />
-                    <SidebarLabel>المكاتب</SidebarLabel>
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarGroup>
-
-            <SidebarGroup>
-              <SidebarGroupLabel>العمليات</SidebarGroupLabel>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={page === 'attendance'} tooltip="الحضور والانصراف" onClick={closeMobile}>
-                  <NavLink to={NAV_PATHS.attendance}>
-                    <CalendarCheck />
-                    <SidebarLabel>الحضور والانصراف</SidebarLabel>
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={page === 'tasks'} tooltip="المهام الخارجية" onClick={closeMobile}>
-                  <NavLink to={NAV_PATHS.tasks}>
-                    <Briefcase />
-                    <SidebarLabel>المهام الخارجية</SidebarLabel>
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={page === 'settings'} tooltip="الإعدادات" onClick={closeMobile}>
-                  <NavLink to={NAV_PATHS.settings}>
-                    <Settings />
-                    <SidebarLabel>الإعدادات</SidebarLabel>
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarGroup>
+            {NAV_GROUPS.map((group) => {
+              const visible = group.pages.filter((p) => canAccessNavPage(profile, p))
+              if (visible.length === 0) return null
+              return (
+                <SidebarGroup key={group.label}>
+                  <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+                  {visible.map((item) => {
+                    const Icon = NAV_ICONS[item]
+                    return (
+                      <SidebarMenuItem key={item}>
+                        <SidebarMenuButton
+                          asChild
+                          isActive={page === item}
+                          tooltip={NAV_TITLES[item]}
+                          onClick={closeMobile}
+                        >
+                          <NavLink to={NAV_PATHS[item]}>
+                            <Icon />
+                            <SidebarLabel>{NAV_TITLES[item]}</SidebarLabel>
+                          </NavLink>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    )
+                  })}
+                </SidebarGroup>
+              )
+            })}
           </SidebarMenu>
         </SidebarContent>
 
         <SidebarFooter>
           <SidebarSeparator />
-          <UserFooter profile={profile} onSignOut={onSignOut} />
+          <UserFooter
+            profile={profile}
+            onSignOut={onSignOut}
+            onRefreshPermissions={onRefreshPermissions}
+            refreshingPermissions={refreshingPermissions}
+          />
         </SidebarFooter>
       </Sidebar>
 
@@ -244,16 +302,19 @@ function HomeShell({
 function HomePage({ token, onSignOut }: { token: string; onSignOut: () => void }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [accessChecked, setAccessChecked] = useState(false)
+  const [noPermissions, setNoPermissions] = useState(false)
+  const [refreshingPermissions, setRefreshingPermissions] = useState(false)
 
   useEffect(() => {
     let cancelled = false
     getProfile(token)
       .then((data) => {
         if (cancelled) return
-        if (data.role !== 'ADMIN' && data.role !== 'HR') {
-          notify.error('هذه اللوحة مخصصة لمديري النظام وموارد البشرية فقط.')
-          clearToken()
-          onSignOut()
+        // Access is decided by permissions only — a user with none gets a
+        // friendly screen instead of a silent kick back to the login page.
+        if (!data.permissions || data.permissions.length === 0) {
+          setNoPermissions(true)
+          setAccessChecked(true)
           return
         }
         setProfile(data)
@@ -276,13 +337,43 @@ function HomePage({ token, onSignOut }: { token: string; onSignOut: () => void }
     }
   }, [token, onSignOut])
 
+  const handleRefreshPermissions = useCallback(() => {
+    if (!token || refreshingPermissions) return
+    setRefreshingPermissions(true)
+    const toastId = notify.loading('جارٍ تحديث الصلاحيات...')
+    getProfile(token)
+      .then((data) => {
+        notify.dismiss(toastId)
+        if (!data.permissions || data.permissions.length === 0) {
+          notify.info('لا توجد صلاحيات مرتبطة بحسابك.')
+          setNoPermissions(true)
+          setProfile(null)
+          return
+        }
+        setProfile(data)
+        setNoPermissions(false)
+        notify.success('تم تحديث الصلاحيات')
+      })
+      .catch((err: unknown) => {
+        notify.dismiss(toastId)
+        if (isUnauthorizedError(err)) {
+          notify.error(err, 'انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.')
+          clearToken()
+          onSignOut()
+          return
+        }
+        notify.error(err, 'تعذر تحديث الصلاحيات.')
+      })
+      .finally(() => setRefreshingPermissions(false))
+  }, [token, refreshingPermissions, onSignOut])
+
   const handleSignOut = () => {
     clearToken()
     notify.info('تم تسجيل الخروج', 'نراك قريباً.')
     onSignOut()
   }
 
-  if (!accessChecked || !profile) {
+  if (!accessChecked) {
     return (
       <div className="m-6 max-w-[480px] rounded-2xl border border-border bg-white p-7 shadow-card">
         <p className="m-0 text-sm text-muted">جارٍ التحقق من الصلاحيات...</p>
@@ -290,29 +381,72 @@ function HomePage({ token, onSignOut }: { token: string; onSignOut: () => void }
     )
   }
 
+  if (noPermissions || !profile) {
+    return <NoPermissionsScreen onSignOut={handleSignOut} />
+  }
+
+  const homePath = NAV_PATHS[firstAllowedPage(profile)]
+
   return (
     <SidebarProvider>
       <Routes>
-        <Route element={<HomeShell profile={profile} onSignOut={handleSignOut} />}>
+        <Route
+          element={
+            <HomeShell
+              profile={profile}
+              onSignOut={handleSignOut}
+              onRefreshPermissions={handleRefreshPermissions}
+              refreshingPermissions={refreshingPermissions}
+            />
+          }
+        >
           <Route
             path={NAV_PATHS.employees}
-            element={<EmployeesPage token={token} onUnauthorized={handleSignOut} />}
+            element={
+              <RequirePermission profile={profile} page="employees">
+                <EmployeesPage token={token} permissions={profile.permissions} onUnauthorized={handleSignOut} />
+              </RequirePermission>
+            }
           />
           <Route
             path={NAV_PATHS.departments}
-            element={<DepartmentsPage token={token} onUnauthorized={handleSignOut} />}
+            element={
+              <RequirePermission profile={profile} page="departments">
+                <DepartmentsPage token={token} permissions={profile.permissions} onUnauthorized={handleSignOut} />
+              </RequirePermission>
+            }
           />
           <Route
             path={NAV_PATHS.offices}
-            element={<OfficesPage token={token} onUnauthorized={handleSignOut} />}
+            element={
+              <RequirePermission profile={profile} page="offices">
+                <OfficesPage token={token} permissions={profile.permissions} onUnauthorized={handleSignOut} />
+              </RequirePermission>
+            }
           />
           <Route
             path={NAV_PATHS.attendance}
-            element={<AttendancePage token={token} onUnauthorized={handleSignOut} />}
+            element={
+              <RequirePermission profile={profile} page="attendance">
+                <AttendancePage token={token} permissions={profile.permissions} onUnauthorized={handleSignOut} />
+              </RequirePermission>
+            }
           />
           <Route
             path={NAV_PATHS.tasks}
-            element={<TasksPage token={token} onUnauthorized={handleSignOut} />}
+            element={
+              <RequirePermission profile={profile} page="tasks">
+                <TasksPage token={token} permissions={profile.permissions} onUnauthorized={handleSignOut} />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path={NAV_PATHS.roles}
+            element={
+              <RequirePermission profile={profile} page="roles">
+                <RolesPage token={token} permissions={profile.permissions} onUnauthorized={handleSignOut} />
+              </RequirePermission>
+            }
           />
           <Route
             path={NAV_PATHS.settings}
@@ -325,8 +459,8 @@ function HomePage({ token, onSignOut }: { token: string; onSignOut: () => void }
               />
             }
           />
-          <Route path="/" element={<Navigate to={NAV_PATHS.employees} replace />} />
-          <Route path="*" element={<Navigate to={NAV_PATHS.employees} replace />} />
+          <Route path="/" element={<Navigate to={homePath} replace />} />
+          <Route path="*" element={<Navigate to={homePath} replace />} />
         </Route>
       </Routes>
     </SidebarProvider>

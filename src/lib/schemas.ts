@@ -1,6 +1,14 @@
 import { z } from 'zod'
 
-export const roleSchema = z.enum(['ADMIN', 'HR', 'EMPLOYEE'])
+/**
+ * Role names are free-form strings now (backed by the `roles` table).
+ * The backend validates the name exists on register/update.
+ */
+export const roleSchema = z
+  .string()
+  .trim()
+  .min(1, 'الدور مطلوب.')
+  .max(80, 'اسم الدور طويل جداً.')
 
 const bioFieldSchema = z
   .union([z.literal(''), z.null(), z.string().trim().max(500, 'النبذة طويلة جداً.')])
@@ -163,6 +171,61 @@ export const listUsersParamsSchema = z.object({
   officeId: z.number().int().positive().optional(),
   isActive: z.boolean().optional(),
   search: z.string().trim().optional(),
+})
+
+/* ---------- Roles CRUD (permission-based RBAC) ---------- */
+
+export const roleNameSchema = z
+  .string()
+  .trim()
+  .min(2, 'اسم الدور يجب أن يكون حرفين على الأقل.')
+  .max(80, 'اسم الدور طويل جداً.')
+  .regex(
+    /^[A-Za-z0-9 _.-]+$/,
+    'اسم الدور يمكن أن يحتوي على أحرف إنجليزية وأرقام ومسافات والرموز . _ - فقط.',
+  )
+
+const roleDescriptionSchema = z
+  .union([z.literal(''), z.null(), z.string().trim().max(255, 'الوصف طويل جداً.')])
+  .optional()
+  .transform((v) => (v === '' || v === undefined ? null : v))
+
+export const createRoleSchema = z.object({
+  name: roleNameSchema,
+  description: roleDescriptionSchema,
+  permissions: z.array(z.string().trim().min(1)).optional(),
+})
+
+export const updateRoleSchema = z.object({
+  name: roleNameSchema.optional(),
+  description: roleDescriptionSchema,
+  permissions: z.array(z.string().trim().min(1)).optional(),
+})
+
+export const listRolesParamsSchema = z.object({
+  page: z.number().int().positive().optional(),
+  limit: z.number().int().positive().max(100).optional(),
+  search: z.string().trim().optional(),
+})
+
+export const roleRecordSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  description: z.string().nullable(),
+  permissions: z.array(z.string()),
+  /** ADMIN/HR/EMPLOYEE are code-owned: no rename, no delete, permissions re-synced on boot. */
+  isSystem: z.boolean(),
+  userCount: z.number(),
+  createdAt: z.string().nullable().optional(),
+  updatedAt: z.string().nullable().optional(),
+})
+
+export const paginatedRolesSchema = z.object({
+  data: z.array(roleRecordSchema),
+  page: z.number(),
+  limit: z.number(),
+  total: z.number(),
+  totalPages: z.number(),
 })
 
 export const departmentOptionSchema = z.object({
@@ -360,6 +423,7 @@ export const userRecordSchema = z.object({
   phoneNumber: z.string(),
   email: z.string().nullable(),
   role: roleSchema,
+  permissions: z.array(z.string()),
   employeeCode: z.string(),
   deviceId: z.string().nullable(),
   points: z.number(),
@@ -521,6 +585,12 @@ export const deviceSecurityLogSchema = z.object({
 export const attendanceSecurityLogSchema = deviceSecurityLogSchema
 
 export type Role = z.infer<typeof roleSchema>
+export type RoleRecord = z.infer<typeof roleRecordSchema>
+export type CreateRoleInput = z.infer<typeof createRoleSchema>
+export type UpdateRoleInput = z.infer<typeof updateRoleSchema>
+export type ListRolesParams = z.infer<typeof listRolesParamsSchema>
+export type PaginatedRoles = z.infer<typeof paginatedRolesSchema>
+export type RoleOption = { id: number; name: string }
 export type LoginInput = z.infer<typeof loginSchema>
 export type RegisterUserInput = z.infer<typeof registerUserSchema>
 export type UpdateUserInput = z.infer<typeof updateUserSchema>

@@ -84,6 +84,15 @@ export const queryKeys = {
       params: { page: number; limit: number; from: string; to: string; type?: string },
     ) => [...queryKeys.attendance.all, 'user', userId, params] as const,
   },
+  roles: {
+    all: ['roles'] as const,
+    list: (params: { page: number; limit: number; search: string }) =>
+      [...queryKeys.roles.all, 'list', params] as const,
+    /** GET /roles/permissions — full permission catalog for the role editor. */
+    catalog: () => [...queryKeys.roles.all, 'catalog'] as const,
+    /** Flat role options for selects (requires role.readAll). */
+    options: () => [...queryKeys.roles.all, 'options'] as const,
+  },
   profile: {
     me: ['profile', 'me'] as const,
   },
