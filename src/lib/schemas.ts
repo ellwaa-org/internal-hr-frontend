@@ -586,49 +586,6 @@ export const deviceSecurityLogSchema = z.object({
 
 export const attendanceSecurityLogSchema = deviceSecurityLogSchema
 
-/* ---------- Audit logs (who changed what, before → after) ---------- */
-
-export const auditActions = ['create', 'update', 'delete', 'assign', 'unassign'] as const
-export const auditActionSchema = z.enum(auditActions)
-
-/** Arbitrary JSON snapshot of the entity before/after a mutating action. */
-const auditSnapshotSchema = z.record(z.string(), z.unknown()).nullable()
-
-export const auditLogSchema = z.object({
-  id: z.string(),
-  userId: z.number().nullable(),
-  actor: z
-    .object({
-      id: z.number().nullable(),
-      employeeCode: z.string().nullable(),
-      role: z.string().nullable(),
-    })
-    .nullable(),
-  // Tolerant on read: unknown future action values render with a neutral badge.
-  action: z.string(),
-  module: z.string(),
-  route: z.string(),
-  entityId: z.string().nullable(),
-  before: auditSnapshotSchema,
-  after: auditSnapshotSchema,
-  ip: z.string().nullable(),
-  createdAt: z.string(),
-  // Joined lookup of the current user — null when the user was deleted.
-  fullName: z.string().nullable(),
-  employeeCode: z.string().nullable(),
-})
-
-export const listAuditLogsParamsSchema = z.object({
-  page: z.number().int().positive().optional(),
-  limit: z.number().int().positive().max(100).optional(),
-  userId: z.number().int().positive().optional(),
-  action: auditActionSchema.optional(),
-  module: z.string().trim().min(1).optional(),
-  route: z.string().trim().min(1).optional(),
-  from: z.string().trim().min(1).optional(),
-  to: z.string().trim().min(1).optional(),
-})
-
 export type Role = z.infer<typeof roleSchema>
 export type RoleRecord = z.infer<typeof roleRecordSchema>
 export type CreateRoleInput = z.infer<typeof createRoleSchema>
@@ -674,17 +631,6 @@ export type AttendanceUserStatus = z.infer<typeof attendanceUserStatusSchema>
 export type SecurityLogAttempt = z.infer<typeof securityLogAttemptSchema>
 export type DeviceSecurityLog = z.infer<typeof deviceSecurityLogSchema>
 export type AttendanceSecurityLog = z.infer<typeof attendanceSecurityLogSchema>
-export type AuditAction = z.infer<typeof auditActionSchema>
-export type AuditLog = z.infer<typeof auditLogSchema>
-export type ListAuditLogsParams = z.infer<typeof listAuditLogsParamsSchema>
-/** Flat pagination shape, same as PaginatedUsers and friends. */
-export type PaginatedAuditLogs = {
-  data: AuditLog[]
-  page: number
-  limit: number
-  total: number
-  totalPages: number
-}
 
 /** Collect first Zod issue messages as Arabic-friendly list. */
 export function zodErrorMessage(error: z.ZodError): string {

@@ -7,7 +7,6 @@ import {
   LogOut,
   MapPin,
   RefreshCw,
-  ScrollText,
   Settings,
   ShieldAlert,
   ShieldCheck,
@@ -20,7 +19,6 @@ import { NAV_PATHS, NAV_TITLES, canAccessNavPage, firstAllowedPage, navPageFromP
 import { roleLabel } from '@/lib/permissions'
 import { notify } from '@/lib/toast'
 import AttendancePage from '@/features/attendance/AttendancePage'
-import AuditLogsPage from '@/features/audit/AuditLogsPage'
 import DepartmentsPage from '@/features/departments/DepartmentsPage'
 import EmployeesPage from '@/features/employees/EmployeesPage'
 import OfficesPage from '@/features/offices/OfficesPage'
@@ -65,12 +63,11 @@ const NAV_ICONS: Record<NavPage, typeof Users> = {
   attendance: CalendarCheck,
   tasks: Briefcase,
   roles: ShieldCheck,
-  auditLogs: ScrollText,
   settings: Settings,
 }
 
 const NAV_GROUPS: { label: string; pages: NavPage[] }[] = [
-  { label: 'الرئيسية', pages: ['employees', 'departments', 'offices', 'roles', 'auditLogs'] },
+  { label: 'الرئيسية', pages: ['employees', 'departments', 'offices', 'roles'] },
   { label: 'العمليات', pages: ['attendance', 'tasks', 'settings'] },
 ]
 
@@ -448,18 +445,6 @@ function HomePage({ token, onSignOut }: { token: string; onSignOut: () => void }
             element={
               <RequirePermission profile={profile} page="roles">
                 <RolesPage token={token} permissions={profile.permissions} onUnauthorized={handleSignOut} />
-              </RequirePermission>
-            }
-          />
-          <Route
-            path={NAV_PATHS.auditLogs}
-            element={
-              <RequirePermission profile={profile} page="auditLogs">
-                <AuditLogsPage
-                  token={token}
-                  permissions={profile.permissions}
-                  onUnauthorized={handleSignOut}
-                />
               </RequirePermission>
             }
           />
