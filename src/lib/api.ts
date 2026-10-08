@@ -332,6 +332,7 @@ export async function getProfile(token: string): Promise<Profile> {
     email: user.email,
     role: user.role,
     permissions: user.permissions,
+    canAccessDashboard: user.canAccessDashboard,
     employeeCode: user.employeeCode,
     deviceId: user.deviceId,
     points: user.points,
@@ -425,6 +426,8 @@ function asUserRecord(raw: Record<string, unknown>): UserRecord {
     email: (raw.email as string | null) ?? null,
     role: typeof raw.role === 'string' && raw.role.trim() ? raw.role : 'EMPLOYEE',
     permissions: asPermissionList(raw.permissions),
+    // Strict coercion: a missing/false flag denies dashboard access.
+    canAccessDashboard: raw.canAccessDashboard === true,
     employeeCode: String(raw.employeeCode ?? raw.code ?? ''),
     deviceId: (raw.deviceId as string | null) ?? null,
     points: Number(raw.points ?? 0),
