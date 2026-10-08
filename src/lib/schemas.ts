@@ -426,8 +426,6 @@ export const userRecordSchema = z.object({
   email: z.string().nullable(),
   role: roleSchema,
   permissions: z.array(z.string()),
-  /** True only when the user's role holds dashboard.access — gates the whole admin app. */
-  canAccessDashboard: z.boolean(),
   employeeCode: z.string(),
   deviceId: z.string().nullable(),
   points: z.number(),

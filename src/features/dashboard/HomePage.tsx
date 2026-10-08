@@ -180,31 +180,6 @@ function NoPermissionsScreen({ onSignOut }: { onSignOut: () => void }) {
   )
 }
 
-/**
- * The dashboard security boundary: rendered instead of the whole admin app
- * (nav, layout, data) when canAccessDashboard is false or missing.
- */
-function AccessDeniedScreen({ onSignOut }: { onSignOut: () => void }) {
-  return (
-    <div className="flex min-h-svh items-center justify-center bg-white p-6">
-      <div className="flex w-full max-w-[460px] flex-col items-center gap-4 rounded-2xl border border-border bg-white px-8 py-10 text-center shadow-card">
-        <img src={logo} className="h-14 w-14 object-contain" alt="شعار اللواء للخدمات القانونية" />
-        <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-danger-soft text-red-700">
-          <ShieldAlert className="h-6 w-6" />
-        </span>
-        <h1 className="m-0 text-lg font-bold text-foreground">لا تملك صلاحية الوصول إلى لوحة التحكم</h1>
-        <p className="m-0 text-sm leading-relaxed text-muted">
-          حسابك غير مسموح له بتسجيل الدخول هنا. إذا كنت تعتقد أن هذا خطأ، تواصل مع المسؤول.
-        </p>
-        <Button type="button" variant="primary" onClick={onSignOut}>
-          <LogOut />
-          تسجيل الخروج
-        </Button>
-      </div>
-    </div>
-  )
-}
-
 /** Route guard — hides nothing from the URL bar, but blocks pages without permission. */
 function RequirePermission({
   profile,
@@ -330,7 +305,6 @@ function HomeShell({
 function HomePage({ token, onSignOut }: { token: string; onSignOut: () => void }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [accessChecked, setAccessChecked] = useState(false)
-  const [dashboardDenied, setDashboardDenied] = useState(false)
   const [noPermissions, setNoPermissions] = useState(false)
   const [refreshingPermissions, setRefreshingPermissions] = useState(false)
 
@@ -339,13 +313,6 @@ function HomePage({ token, onSignOut }: { token: string; onSignOut: () => void }
     getProfile(token)
       .then((data) => {
         if (cancelled) return
-        // Entry gate (enforcement): without canAccessDashboard the whole admin
-        // app is replaced by the access-denied screen — no nav, layout, or data.
-        if (!data.canAccessDashboard) {
-          setDashboardDenied(true)
-          setAccessChecked(true)
-          return
-        }
         // Access is decided by permissions only — a user with none gets a
         // friendly screen instead of a silent kick back to the login page.
         if (!data.permissions || data.permissions.length === 0) {
@@ -380,14 +347,6 @@ function HomePage({ token, onSignOut }: { token: string; onSignOut: () => void }
     getProfile(token)
       .then((data) => {
         notify.dismiss(toastId)
-        if (!data.canAccessDashboard) {
-          // Permission revoked mid-session — leave the dashboard immediately.
-          notify.info('لم يعد حسابك مسموحاً له بالوصول إلى لوحة التحكم.')
-          setDashboardDenied(true)
-          setNoPermissions(false)
-          setProfile(null)
-          return
-        }
         if (!data.permissions || data.permissions.length === 0) {
           notify.info('لا توجد صلاحيات مرتبطة بحسابك.')
           setNoPermissions(true)
@@ -396,7 +355,6 @@ function HomePage({ token, onSignOut }: { token: string; onSignOut: () => void }
         }
         setProfile(data)
         setNoPermissions(false)
-        setDashboardDenied(false)
         notify.success('تم تحديث الصلاحيات')
       })
       .catch((err: unknown) => {
@@ -424,10 +382,6 @@ function HomePage({ token, onSignOut }: { token: string; onSignOut: () => void }
         <p className="m-0 text-sm text-muted">جارٍ التحقق من الصلاحيات...</p>
       </div>
     )
-  }
-
-  if (dashboardDenied) {
-    return <AccessDeniedScreen onSignOut={handleSignOut} />
   }
 
   if (noPermissions || !profile) {
