@@ -1,7 +1,8 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { Eye, EyeOff, KeyRound, Loader2, RotateCcw, Save, Shield, UserRound } from 'lucide-react'
 import { changePassword, getProfile, updateUser, type Profile } from '@/lib/api'
-import { isUnauthorizedError } from '@/lib/errors'
+import { errorMessageFromUnknown, isForbiddenError, isUnauthorizedError } from '@/lib/errors'
+import { roleLabel } from '@/lib/permissions'
 import { changePasswordSchema, updateUserSchema, zodErrorMessage } from '@/lib/schemas'
 import { notify } from '@/lib/toast'
 import { cn } from '@/lib/utils'
@@ -9,12 +10,6 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { PageHeader, PageShell } from '@/components/ui/page'
-
-const ROLE_LABELS: Record<Profile['role'], string> = {
-  ADMIN: 'مدير النظام',
-  HR: 'موارد بشرية',
-  EMPLOYEE: 'موظف',
-}
 
 function initialsOf(name: string): string {
   return name
@@ -246,9 +241,10 @@ function SettingsPage({
     } catch (err) {
       notify.dismiss(toastId)
       if (handleUnauthorized(err)) return
-      const message = err instanceof Error ? err.message : 'تعذر حفظ بيانات الحساب.'
+      const message = errorMessageFromUnknown(err, 'تعذر حفظ بيانات الحساب.')
       setProfileError(message)
-      notify.error(err, 'تعذر حفظ بيانات الحساب.')
+      // 403 already toasted globally — keep the session and only show inline.
+      if (!isForbiddenError(err)) notify.error(err, 'تعذر حفظ بيانات الحساب.')
     } finally {
       setSavingProfile(false)
     }
@@ -280,9 +276,10 @@ function SettingsPage({
     } catch (err) {
       notify.dismiss(toastId)
       if (handleUnauthorized(err)) return
-      const message = err instanceof Error ? err.message : 'تعذر تغيير كلمة المرور.'
+      const message = errorMessageFromUnknown(err, 'تعذر تغيير كلمة المرور.')
       setPasswordError(message)
-      notify.error(err, 'تعذر تغيير كلمة المرور.')
+      // 403 already toasted globally — keep the session and only show inline.
+      if (!isForbiddenError(err)) notify.error(err, 'تعذر تغيير كلمة المرور.')
     } finally {
       setSavingPassword(false)
     }
@@ -304,7 +301,7 @@ function SettingsPage({
           <div className="truncate text-lg font-bold text-foreground">{profile.fullName}</div>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-[13px] text-muted">
             <span className="inline-flex items-center rounded-md bg-hover px-2 py-0.5 font-medium text-foreground">
-              {ROLE_LABELS[profile.role]}
+              {roleLabel(profile.role)}
             </span>
             <span>كود الموظف: {profile.employeeCode}</span>
             {profile.points > 0 ? <span>النقاط: {profile.points}</span> : null}
@@ -403,7 +400,7 @@ function SettingsPage({
             <div className="mt-4 grid grid-cols-2 gap-3 rounded-[10px] border border-dashed border-border px-3.5 py-3">
               <div className="flex flex-col gap-0.5 text-[13px]">
                 <span className="text-muted">الدور</span>
-                <span className="font-semibold text-foreground">{ROLE_LABELS[profile.role]}</span>
+                <span className="font-semibold text-foreground">{roleLabel(profile.role)}</span>
               </div>
               <div className="flex flex-col gap-0.5 text-[13px]">
                 <span className="text-muted">النقاط</span>
