@@ -1,6 +1,14 @@
 import { z } from 'zod'
 
-export const roleSchema = z.enum(['ADMIN', 'HR', 'EMPLOYEE'])
+/**
+ * Role names are free-form strings now (backed by the `roles` table).
+ * The backend validates the name exists on register/update.
+ */
+export const roleSchema = z
+  .string()
+  .trim()
+  .min(1, 'الدور مطلوب.')
+  .max(80, 'اسم الدور طويل جداً.')
 
 const bioFieldSchema = z
   .union([z.literal(''), z.null(), z.string().trim().max(500, 'النبذة طويلة جداً.')])
@@ -163,6 +171,61 @@ export const listUsersParamsSchema = z.object({
   officeId: z.number().int().positive().optional(),
   isActive: z.boolean().optional(),
   search: z.string().trim().optional(),
+})
+
+/* ---------- Roles CRUD (permission-based RBAC) ---------- */
+
+export const roleNameSchema = z
+  .string()
+  .trim()
+  .min(2, 'اسم الدور يجب أن يكون حرفين على الأقل.')
+  .max(80, 'اسم الدور طويل جداً.')
+  .regex(
+    /^[A-Za-z0-9 _.-]+$/,
+    'اسم الدور يمكن أن يحتوي على أحرف إنجليزية وأرقام ومسافات والرموز . _ - فقط.',
+  )
+
+const roleDescriptionSchema = z
+  .union([z.literal(''), z.null(), z.string().trim().max(255, 'الوصف طويل جداً.')])
+  .optional()
+  .transform((v) => (v === '' || v === undefined ? null : v))
+
+export const createRoleSchema = z.object({
+  name: roleNameSchema,
+  description: roleDescriptionSchema,
+  permissions: z.array(z.string().trim().min(1)).optional(),
+})
+
+export const updateRoleSchema = z.object({
+  name: roleNameSchema.optional(),
+  description: roleDescriptionSchema,
+  permissions: z.array(z.string().trim().min(1)).optional(),
+})
+
+export const listRolesParamsSchema = z.object({
+  page: z.number().int().positive().optional(),
+  limit: z.number().int().positive().max(100).optional(),
+  search: z.string().trim().optional(),
+})
+
+export const roleRecordSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  description: z.string().nullable(),
+  permissions: z.array(z.string()),
+  /** ADMIN/HR/EMPLOYEE are code-owned: no rename, no delete, permissions re-synced on boot. */
+  isSystem: z.boolean(),
+  userCount: z.number(),
+  createdAt: z.string().nullable().optional(),
+  updatedAt: z.string().nullable().optional(),
+})
+
+export const paginatedRolesSchema = z.object({
+  data: z.array(roleRecordSchema),
+  page: z.number(),
+  limit: z.number(),
+  total: z.number(),
+  totalPages: z.number(),
 })
 
 export const departmentOptionSchema = z.object({
@@ -360,6 +423,9 @@ export const userRecordSchema = z.object({
   phoneNumber: z.string(),
   email: z.string().nullable(),
   role: roleSchema,
+  permissions: z.array(z.string()),
+  /** = permissions.includes('dashboard.access'); only auth endpoints send it. */
+  canAccessDashboard: z.boolean().optional(),
   employeeCode: z.string(),
   deviceId: z.string().nullable(),
   points: z.number(),
@@ -520,7 +586,99 @@ export const deviceSecurityLogSchema = z.object({
 
 export const attendanceSecurityLogSchema = deviceSecurityLogSchema
 
+/* ---------- Audit logs (who changed what, old → new) ---------- */
+
+export const auditActions = [
+  'create',
+  'update',
+  'delete',
+  'restore',
+  'activate',
+  'deactivate',
+  'login',
+  'logout',
+  'assign',
+  'unassign',
+] as const
+export const auditActionSchema = z.enum(auditActions)
+
+export const auditActorTypes = ['user', 'client', 'system'] as const
+export const auditActorTypeSchema = z.enum(auditActorTypes)
+
+/** `changes` payload of an update row: per-field `{ from, to }` pairs. */
+export const auditChangesDiffSchema = z.record(
+  z.string(),
+  z.object({ from: z.unknown(), to: z.unknown() }).loose(),
+)
+
+/**
+ * Backend `changes` payload (internal keys already stripped server-side).
+ * Two conventions are handled — the live one first:
+ *  - live:  { before: {…}, after: {…} } snapshots (create rows carry only `after`)
+ *  - spec:  { changes: { field: { from, to }, … } } diffs and { entity: {…} } snapshots
+ *  - login/logout rows carry flat metadata, e.g. { role: "ADMIN" }
+ *  - self-service rows also carry { self: true }
+ */
+export const auditChangesSchema = z
+  .object({
+    changes: auditChangesDiffSchema.optional(),
+    entity: z.record(z.string(), z.unknown()).optional(),
+    before: z.record(z.string(), z.unknown()).optional(),
+    after: z.record(z.string(), z.unknown()).optional(),
+    self: z.boolean().optional(),
+  })
+  .loose()
+  .nullable()
+
+export const auditLogSchema = z.object({
+  id: z.string(),
+  createdAt: z.string(),
+  // Tolerant on read: unknown future action values render with a neutral badge.
+  action: z.string(),
+  /** Display name from the backend, e.g. "Users", "Offices". */
+  module: z.string(),
+  actor: z
+    .object({
+      id: z.number().nullable(),
+      type: auditActorTypeSchema,
+      name: z.string(),
+      role: z.string().nullable(),
+    })
+    .nullable(),
+  target: z
+    .object({
+      id: z.string().nullable(),
+      type: z.string().nullable(),
+      label: z.string().nullable(),
+      subtitle: z.string().nullable(),
+    })
+    .nullable(),
+  changes: auditChangesSchema,
+  ipAddress: z.string().nullable(),
+  userAgent: z.string().nullable(),
+})
+
+export const listAuditLogsParamsSchema = z.object({
+  page: z.number().int().positive().optional(),
+  limit: z.number().int().positive().max(500).optional(),
+  action: auditActionSchema.optional(),
+  /** Alias of entityType on the backend (e.g. "user", "food_order"). */
+  module: z.string().trim().min(1).optional(),
+  actorId: z.number().int().positive().optional(),
+  actorType: auditActorTypeSchema.optional(),
+  entityId: z.string().trim().min(1).optional(),
+  startDate: z.string().trim().min(1).optional(),
+  endDate: z.string().trim().min(1).optional(),
+  sortOrder: z.enum(['asc', 'desc']).optional(),
+})
+
 export type Role = z.infer<typeof roleSchema>
+export type RoleRecord = z.infer<typeof roleRecordSchema>
+export type CreateRoleInput = z.infer<typeof createRoleSchema>
+export type UpdateRoleInput = z.infer<typeof updateRoleSchema>
+export type ListRolesParams = z.infer<typeof listRolesParamsSchema>
+export type PaginatedRoles = z.infer<typeof paginatedRolesSchema>
+export type RoleOption = { id: number; name: string; permissionCount?: number }
 export type LoginInput = z.infer<typeof loginSchema>
 export type RegisterUserInput = z.infer<typeof registerUserSchema>
 export type UpdateUserInput = z.infer<typeof updateUserSchema>
@@ -559,6 +717,22 @@ export type AttendanceUserStatus = z.infer<typeof attendanceUserStatusSchema>
 export type SecurityLogAttempt = z.infer<typeof securityLogAttemptSchema>
 export type DeviceSecurityLog = z.infer<typeof deviceSecurityLogSchema>
 export type AttendanceSecurityLog = z.infer<typeof attendanceSecurityLogSchema>
+export type AuditAction = z.infer<typeof auditActionSchema>
+export type AuditActorType = z.infer<typeof auditActorTypeSchema>
+export type AuditChanges = z.infer<typeof auditChangesSchema>
+export type AuditChangesDiff = z.infer<typeof auditChangesDiffSchema>
+export type AuditLog = z.infer<typeof auditLogSchema>
+export type ListAuditLogsParams = z.infer<typeof listAuditLogsParamsSchema>
+/** Flat pagination shape, same as PaginatedUsers and friends. */
+export type PaginatedAuditLogs = {
+  data: AuditLog[]
+  page: number
+  limit: number
+  total: number
+  totalPages: number
+  hasNext: boolean
+  hasPrev: boolean
+}
 
 /** Collect first Zod issue messages as Arabic-friendly list. */
 export function zodErrorMessage(error: z.ZodError): string {
