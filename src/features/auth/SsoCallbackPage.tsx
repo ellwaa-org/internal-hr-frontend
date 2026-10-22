@@ -5,6 +5,8 @@ import {
   completeSsoLogin,
   consumeSsoReturnTo,
   consumeSsoState,
+  loadSsoConfig,
+  startSsoLogin,
 } from '@/lib/sso'
 import { setToken } from '@/lib/api'
 import { notify } from '@/lib/toast'
@@ -26,6 +28,22 @@ function SsoCallbackPage({ onLogin }: { onLogin: (token: string) => void }) {
     const code = params.get('code')
     const state = params.get('state')
     const idpError = params.get('error')
+
+    // Launcher-initiated flow: begin the authorize round-trip here. With a
+    // valid IdP session cookie this hop is invisible — the IdP redirects
+    // straight back with a code.
+    if (!code && params.get('sso') === 'launch') {
+      loadSsoConfig()
+        .then((config) => {
+          if (config.enabled) {
+            startSsoLogin('/')
+          } else {
+            window.location.replace('/')
+          }
+        })
+        .catch(() => window.location.replace('/'))
+      return
+    }
 
     if (idpError) {
       setError(idpError === 'access_denied' ? 'تم رفض الوصول من مزود الهوية.' : `خطأ SSO: ${idpError}`)
