@@ -52,7 +52,6 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
-import { SearchableSelect } from '@/components/ui/searchable-select'
 import {
   FiltersBar,
   PageHeader,
@@ -1066,19 +1065,18 @@ function EmployeeFormDialog({
               <div className="flex flex-col gap-1.5 text-[13px] text-muted">
                 <span>الدور *</span>
                 {availableRoles.length > 0 ? (
-                  <SearchableSelect
-                    value={availableRoles.some((r) => r.name === role) ? role : undefined}
-                    onValueChange={setRole}
-                    options={availableRoles.map((r) => ({
-                      value: r.name,
-                      label: `${roleLabel(r.name) === r.name ? r.name : `${roleLabel(r.name)} (${r.name})`} — ${r.permissionCount ?? 0} صلاحية`,
-                      keywords: r.name,
-                    }))}
-                    placeholder="اختر الدور"
-                    searchPlaceholder="بحث باسم الدور..."
-                    emptyText="لا توجد أدوار"
-                    aria-label="الدور"
-                  />
+                  <Select value={role} onValueChange={setRole}>
+                    <SelectTrigger className="w-full" aria-label="الدور">
+                      <SelectValue placeholder="اختر الدور" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableRoles.map((r) => (
+                        <SelectItem key={r.id} value={r.name}>
+                          {roleLabel(r.name)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 ) : (
                   <Input
                     value={role}
