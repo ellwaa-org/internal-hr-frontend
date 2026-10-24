@@ -930,7 +930,6 @@ function EmployeeFormDialog({
   onRequestConfirm?: (update: UpdatePayload) => void
 }) {
   const availableRoles = roleOptions ?? []
-  const currentRolePermissionCount = availableRoles.find((r) => r.name === role)?.permissionCount
   const [fullName, setFullName] = useState(draft?.fullName ?? user?.fullName ?? '')
   const [employeeCode, setEmployeeCode] = useState(
     draft?.employeeCode ?? user?.employeeCode ?? '',
@@ -943,6 +942,7 @@ function EmployeeFormDialog({
   )
   const [password, setPassword] = useState('4444')
   const [role, setRole] = useState<string>(user?.role ?? 'EMPLOYEE')
+  const currentRolePermissionCount = availableRoles.find((r) => r.name === role)?.permissionCount
   const [bio, setBio] = useState(
     (draft?.bio ?? user?.bio ?? '') as string,
   )
