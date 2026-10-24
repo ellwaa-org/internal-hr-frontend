@@ -27,8 +27,9 @@ import {
   type UpdateOfficeInput,
   type UserRecord,
 } from '@/lib/api'
-import { isUnauthorizedError } from '@/lib/errors'
+import { isForbiddenError, isUnauthorizedError } from '@/lib/errors'
 import { queryKeys, QUERY_STALE_TIME_DEFAULT } from '@/lib/query-client'
+import { hasPermission, roleLabel } from '@/lib/permissions'
 import { createOfficeSchema, updateOfficeSchema, zodErrorMessage } from '@/lib/schemas'
 import { notify } from '@/lib/toast'
 import { formatTime12 } from '@/lib/datetime'
@@ -161,9 +162,11 @@ function toCreatePayload(form: OfficeFormState): CreateOfficeInput {
 
 function OfficesPage({
   token,
+  permissions,
   onUnauthorized,
 }: {
   token: string
+  permissions: string[]
   onUnauthorized: () => void
 }) {
   const queryClient = useQueryClient()
@@ -179,8 +182,15 @@ function OfficesPage({
   const [membersSearch, setMembersSearch] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
 
+  const canCreate = hasPermission(permissions, 'office.create')
+  const canUpdate = hasPermission(permissions, 'office.update')
+  const canDelete = hasPermission(permissions, 'office.delete')
+  const canAssign = hasPermission(permissions, 'office.assign')
+
   const handleApiError = useCallback(
     (err: unknown, fallback: string) => {
+      // 403 = missing permission: already toasted globally, session stays alive.
+      if (isForbiddenError(err)) return
       if (isUnauthorizedError(err)) {
         notify.error(err, 'انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.')
         onUnauthorized()
@@ -458,17 +468,19 @@ function OfficesPage({
         title="المكاتب"
         subtitle="مواقع العمل وقواعد الحضور (النطاق، الوردية، الواي فاي، المكافآت)"
         action={
-          <Button
-            type="button"
-            onClick={() => {
-              setForm(emptyForm())
-              setFormError(null)
-              setModal({ type: 'create' })
-            }} variant="primary" fullOnMobile
-          >
-            <Plus />
-            إضافة مكتب
-          </Button>
+          canCreate ? (
+            <Button
+              type="button"
+              onClick={() => {
+                setForm(emptyForm())
+                setFormError(null)
+                setModal({ type: 'create' })
+              }} variant="primary" fullOnMobile
+            >
+              <Plus />
+              إضافة مكتب
+            </Button>
+          ) : undefined
         }
       />
 
@@ -632,46 +644,56 @@ function OfficesPage({
                       </button>
                     </Td>
                     <TdActions>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            aria-label={`إجراءات ${office.name}`}
-                            title="إجراءات"
-                          >
-                            <MoreHorizontal />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="min-w-60">
-                          <DropdownMenuLabel>{office.name}</DropdownMenuLabel>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onSelect={() => {
-                              setForm(formFromOffice(office))
-                              setFormError(null)
-                              setModal({ type: 'edit', office })
-                            }}
-                          >
-                            <Pencil />
-                            تعديل
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => openMembers(office)}>
-                            <UserPlus />
-                            إدارة الموظفين
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            variant="danger"
-                            onSelect={() => setModal({ type: 'delete', office })}
-                          >
-                            <Trash2 />
-                            حذف
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      {canUpdate || canDelete ? (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              className="h-8 w-8 p-0"
+                              aria-label={`إجراءات ${office.name}`}
+                              title="إجراءات"
+                            >
+                              <MoreHorizontal />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="min-w-60">
+                            <DropdownMenuLabel>{office.name}</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            {canUpdate && (
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  setForm(formFromOffice(office))
+                                  setFormError(null)
+                                  setModal({ type: 'edit', office })
+                                }}
+                              >
+                                <Pencil />
+                                تعديل
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem onSelect={() => openMembers(office)}>
+                              <UserPlus />
+                              إدارة الموظفين
+                            </DropdownMenuItem>
+                            {canDelete && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  variant="danger"
+                                  onSelect={() => setModal({ type: 'delete', office })}
+                                >
+                                  <Trash2 />
+                                  حذف
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
                     </TdActions>
                   </Tr>
                 )
@@ -953,39 +975,41 @@ function OfficesPage({
                 </DialogDescription>
               </DialogHeader>
               <DialogBody>
-                <div className="flex flex-wrap items-end gap-2.5 max-[720px]:flex-col max-[720px]:items-stretch [&_button]:max-[720px]:w-full">
-                  <div className="flex min-w-[min(100%,320px)] flex-1 flex-col gap-1.5 text-[13px] text-muted">
-                    <span>إضافة موظف إلى هذا المكتب</span>
-                    <SearchableSelect
-                      value={assignUserId || undefined}
-                      onValueChange={setAssignUserId}
-                      aria-label="الموظف"
-                      placeholder="اختر موظفاً"
-                      searchPlaceholder="بحث بالاسم أو الكود..."
-                      emptyText="لا يوجد موظف مطابق"
-                      options={assignCandidates.map((u) => ({
-                        value: String(u.id),
-                        label: `${u.fullName} (${u.employeeCode})${
-                          officeNamesOf(u) ? ` — ${officeNamesOf(u)}` : ''
-                        }`,
-                        keywords: `${u.fullName} ${u.employeeCode} ${officeNamesOf(u)}`,
-                      }))}
-                    />
+                {canAssign && (
+                  <div className="flex flex-wrap items-end gap-2.5 max-[720px]:flex-col max-[720px]:items-stretch [&_button]:max-[720px]:w-full">
+                    <div className="flex min-w-[min(100%,320px)] flex-1 flex-col gap-1.5 text-[13px] text-muted">
+                      <span>إضافة موظف إلى هذا المكتب</span>
+                      <SearchableSelect
+                        value={assignUserId || undefined}
+                        onValueChange={setAssignUserId}
+                        aria-label="الموظف"
+                        placeholder="اختر موظفاً"
+                        searchPlaceholder="بحث بالاسم أو الكود..."
+                        emptyText="لا يوجد موظف مطابق"
+                        options={assignCandidates.map((u) => ({
+                          value: String(u.id),
+                          label: `${u.fullName} (${u.employeeCode})${
+                            officeNamesOf(u) ? ` — ${officeNamesOf(u)}` : ''
+                          }`,
+                          keywords: `${u.fullName} ${u.employeeCode} ${officeNamesOf(u)}`,
+                        }))}
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      disabled={busy || !assignUserId}
+                      onClick={() => {
+                        const data = membersDialog.data
+                        if (!data) return
+                        requestAssign(data.office)
+                      }}
+                      variant="primary"
+                    >
+                      <UserPlus />
+                      تعيين
+                    </Button>
                   </div>
-                  <Button
-                    type="button"
-                    disabled={busy || !assignUserId}
-                    onClick={() => {
-                      const data = membersDialog.data
-                      if (!data) return
-                      requestAssign(data.office)
-                    }}
-                    variant="primary"
-                  >
-                    <UserPlus />
-                    تعيين
-                  </Button>
-                </div>
+                )}
                 {formError && <p className="col-span-full m-0 text-[13px] font-semibold text-red-700">{formError}</p>}
 
                 <SearchField
@@ -1009,27 +1033,29 @@ function OfficesPage({
                           <span className="font-semibold text-foreground">{user.fullName}</span>
                           <span className="text-xs text-muted">
                             {user.employeeCode}
-                            {user.role ? ` · ${user.role}` : ''}
+                            {user.role ? ` · ${roleLabel(user.role)}` : ''}
                           </span>
                         </div>
-                        <Button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => {
-                            const data = membersDialog.data
-                            if (!data) return
-                            setModal({
-                              type: 'confirm-unassign',
-                              office: data.office,
-                              user,
-                            })
-                          }}
-                          variant="secondary"
-                          size="sm"
-                        >
-                          <UserMinus />
-                          إزالة
-                        </Button>
+                        {canAssign && (
+                          <Button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => {
+                              const data = membersDialog.data
+                              if (!data) return
+                              setModal({
+                                type: 'confirm-unassign',
+                                office: data.office,
+                                user,
+                              })
+                            }}
+                            variant="secondary"
+                            size="sm"
+                          >
+                            <UserMinus />
+                            إزالة
+                          </Button>
+                        )}
                       </div>
                     ))
                   )}

@@ -84,6 +84,15 @@ export const queryKeys = {
       params: { page: number; limit: number; from: string; to: string; type?: string },
     ) => [...queryKeys.attendance.all, 'user', userId, params] as const,
   },
+  roles: {
+    all: ['roles'] as const,
+    list: (params: { page: number; limit: number; search: string }) =>
+      [...queryKeys.roles.all, 'list', params] as const,
+    /** GET /roles/permissions — full permission catalog for the role editor. */
+    catalog: () => [...queryKeys.roles.all, 'catalog'] as const,
+    /** Flat role options for selects (requires role.readAll). */
+    options: () => [...queryKeys.roles.all, 'options'] as const,
+  },
   profile: {
     me: ['profile', 'me'] as const,
   },
@@ -92,5 +101,22 @@ export const queryKeys = {
     devices: (userId: number) => [...queryKeys.securityLogs.all, 'devices', userId] as const,
     attendance: (userId: number) =>
       [...queryKeys.securityLogs.all, 'attendance', userId] as const,
+  },
+  auditLogs: {
+    all: ['audit-logs'] as const,
+    list: (params: {
+      page: number
+      limit: number
+      action?: string
+      module?: string
+      actorId?: number
+      actorType?: string
+      entityId?: string
+      startDate?: string
+      endDate?: string
+      sortOrder?: string
+    }) => [...queryKeys.auditLogs.all, 'list', params] as const,
+    /** Wide probe page — distinct entityType values power the module filter. */
+    modules: () => [...queryKeys.auditLogs.all, 'modules'] as const,
   },
 }

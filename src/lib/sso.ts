@@ -164,7 +164,15 @@ export function clearSsoTokens(): void {
 export interface SsoLoginResult {
   accessToken: string
   refreshToken: string | null
-  user: { id: number; employeeCode: string; role: string; fullName: string }
+  user: {
+    id: number
+    employeeCode: string
+    role: string
+    fullName: string
+    /** RBAC session fields (same shape as /auth/profile). */
+    permissions?: string[]
+    canAccessDashboard?: boolean
+  }
 }
 
 export async function completeSsoLogin(code: string): Promise<SsoLoginResult> {

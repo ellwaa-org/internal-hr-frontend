@@ -49,8 +49,17 @@ function App() {
   return <HomePage token={token} onSignOut={handleSignOut} />
 }
 
-function readCallback(): boolean {
-  return ['/auth/callback', '/auth/sso/callback', '/sso/callback'].includes(window.location.pathname)
+function readCallback(): { code: string; state: string } | null {
+  const params = new URLSearchParams(window.location.search)
+  const code = params.get('code')
+  const state = params.get('state')
+  if (code && state) return { code, state }
+  // Launcher entry: /auth/callback?sso=launch — SsoCallbackPage starts the
+  // authorize round-trip (which the IdP session cookie completes silently).
+  if (window.location.pathname === '/auth/callback' && params.get('sso') === 'launch') {
+    return { code: '', state: '' }
+  }
+  return null
 }
 
 export default App

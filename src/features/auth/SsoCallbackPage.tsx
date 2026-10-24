@@ -36,13 +36,34 @@ function SsoCallbackPage({ onLogin }: { onLogin: (token: string) => void }) {
     const state = params.get('state')
     const idpError = params.get('error')
 
+    // Launcher-initiated flow: begin the authorize round-trip here. With a
+    // valid IdP session cookie this hop is invisible — the IdP redirects
+    // straight back with a code.
+    if (!code && params.get('sso') === 'launch') {
+      loadSsoConfig()
+        .then((config) => {
+          if (config.enabled) {
+            startSsoLogin('/')
+          } else {
+            window.location.replace('/')
+          }
+        })
+        .catch(() => window.location.replace('/'))
+      return
+    }
+
     if (idpError) {
       throw new Error(idpError === 'access_denied' ? 'تم رفض الوصول من مزود الهوية.' : `خطأ SSO: ${idpError}`)
     }
 
     const expectedState = consumeSsoState()
-    if (!code || !state || !expectedState || state !== expectedState) {
-      throw new Error('جلسة SSO غير صالحة. أعد المحاولة من صفحة الدخول.')
+    // Launcher-initiated flow: the portal issued the code directly, so no
+    // state was stored here — accept it (the code is single-use and bound to
+    // this client + redirect URI). Strict state matching still applies when
+    // the flow started from this app's own login page.
+    if (!code || (expectedState && state !== expectedState)) {
+      setError('جلسة SSO غير صالحة. أعد المحاولة من صفحة الدخول.')
+      return
     }
     window.history.replaceState(window.history.state, '', window.location.pathname)
 
