@@ -24,7 +24,14 @@ function SsoCallbackPage({ onLogin }: { onLogin: (token: string) => void }) {
     if (handled.current) return
     handled.current = true
 
+    void (async () => {
     const params = new URLSearchParams(window.location.search)
+    if (params.get('sso') === 'launch') {
+      const config = await loadSsoConfig()
+      if (!config.enabled || !config.clientId || !config.authorizeUrl) throw new Error('SSO is not configured')
+      startSsoLogin('/')
+      return
+    }
     const code = params.get('code')
     const state = params.get('state')
     const idpError = params.get('error')
@@ -46,8 +53,7 @@ function SsoCallbackPage({ onLogin }: { onLogin: (token: string) => void }) {
     }
 
     if (idpError) {
-      setError(idpError === 'access_denied' ? 'تم رفض الوصول من مزود الهوية.' : `خطأ SSO: ${idpError}`)
-      return
+      throw new Error(idpError === 'access_denied' ? 'تم رفض الوصول من مزود الهوية.' : `خطأ SSO: ${idpError}`)
     }
 
     const expectedState = consumeSsoState()
@@ -59,8 +65,9 @@ function SsoCallbackPage({ onLogin }: { onLogin: (token: string) => void }) {
       setError('جلسة SSO غير صالحة. أعد المحاولة من صفحة الدخول.')
       return
     }
+    window.history.replaceState(window.history.state, '', window.location.pathname)
 
-    completeSsoLogin(code)
+    await completeSsoLogin(code)
       .then((result) => {
         clearSsoState()
         setToken(result.accessToken)
@@ -74,6 +81,7 @@ function SsoCallbackPage({ onLogin }: { onLogin: (token: string) => void }) {
           err instanceof Error ? err.message : 'فشل تسجيل الدخول الموحد. أعد المحاولة.'
         setError(message)
       })
+    })().catch((err: unknown) => setError(err instanceof Error ? err.message : 'SSO login failed'))
   }, [onLogin])
 
   if (error) {

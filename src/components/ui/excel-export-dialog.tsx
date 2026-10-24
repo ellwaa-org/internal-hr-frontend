@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Download, Loader2 } from 'lucide-react'
 import type { DateRange } from 'react-day-picker'
 import { Button } from '@/components/ui/button'
@@ -48,11 +48,14 @@ export function ExcelExportDialog({
   const [range, setRange] = useState<DateRange | undefined>(initialRange)
   const [month, setMonth] = useState(initialRange.from ?? new Date())
 
-  useEffect(() => {
-    if (!open) return
-    setRange(initialRange)
-    setMonth(initialRange.from ?? new Date())
-  }, [open, initialRange])
+  const [previous, setPrevious] = useState({ open, initialRange })
+  if (open !== previous.open || initialRange !== previous.initialRange) {
+    setPrevious({ open, initialRange })
+    if (open) {
+      setRange(initialRange)
+      setMonth(initialRange.from ?? new Date())
+    }
+  }
 
   const fromIso = range?.from ? toIsoDate(range.from) : ''
   const toIso = range?.to ? toIsoDate(range.to) : range?.from ? toIsoDate(range.from) : ''
