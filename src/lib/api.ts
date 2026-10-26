@@ -14,7 +14,6 @@ import { notify } from './toast'
 import {
 
   changePasswordSchema,
-  createDepartmentSchema,
   createOfficeSchema,
   exportAttendanceExcelParamsSchema,
   listAttendanceParamsSchema,
@@ -28,7 +27,6 @@ import {
   parseOrThrow,
   registerUserSchema,
   resetPasswordSchema,
-  updateDepartmentSchema,
   updateOfficeSchema,
   updateUserSchema,
   updateFieldTaskSchema,
@@ -1174,90 +1172,6 @@ export async function listDepartmentOptions(
   return result.data.map((item) => ({ id: item.id, name: item.name }))
 }
 
-export function createDepartment(
-  token: string,
-  input: CreateDepartmentInput,
-): Promise<DepartmentRecord | unknown> {
-  const payload = parseOrThrow(createDepartmentSchema, input)
-  return request(
-    '/department/create',
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-    token,
-  )
-}
-
-export function updateDepartment(
-  token: string,
-  id: number,
-  input: UpdateDepartmentInput,
-): Promise<DepartmentRecord | unknown> {
-  const payload = parseOrThrow(updateDepartmentSchema, input)
-  return request(
-    `/department/${id}`,
-    {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    },
-    token,
-  )
-}
-
-export function deleteDepartment(token: string, id: number): Promise<unknown> {
-  return request(`/department/${id}`, { method: 'DELETE' }, token)
-}
-
-export function assignUserToDepartment(
-  token: string,
-  departmentId: number,
-  userId: number,
-): Promise<unknown> {
-  return request(
-    `/department/${departmentId}/assign`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ userId }),
-    },
-    token,
-  )
-}
-
-export function unassignUserFromDepartment(token: string, userId: number): Promise<unknown> {
-  return request(
-    '/department/unassign',
-    {
-      method: 'POST',
-      body: JSON.stringify({ userId }),
-    },
-    token,
-  )
-}
-
-export async function listDepartmentUsers(
-  token: string,
-  departmentId: number,
-  params: {
-    page?: number
-    limit?: number
-    search?: string
-    role?: Role
-    isActive?: boolean
-  } = {},
-): Promise<PaginatedUsers> {
-  const page = params.page ?? 1
-  const limit = params.limit ?? 50
-  const qs = toQuery({
-    page,
-    limit,
-    search: params.search,
-    role: params.role,
-    isActive: params.isActive,
-  })
-  const body = await request<unknown>(`/department/${departmentId}/users${qs}`, {}, token)
-  return normalizePaginated(body, page, limit, ['data', 'users', 'items', 'results'], asUserRecord)
-}
 
 export async function listOffices(
   token: string,

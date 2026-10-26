@@ -17,7 +17,6 @@ import {
 } from 'lucide-react'
 import {
   deleteUser,
-  listDepartmentOptions,
   listOfficeOptions,
   listRoleOptions,
   listUsers,
@@ -29,7 +28,6 @@ import {
   resetUserPassword,
   setUserStatus,
   updateUser,
-  type DepartmentOption,
   type OfficeOption,
   type RegisterUserInput,
   type RoleOption,
@@ -180,13 +178,6 @@ function EmployeesPage({
       }),
   })
 
-  const departmentsQuery = useQuery({
-    queryKey: queryKeys.departments.options(),
-    staleTime: QUERY_STALE_TIME_FREQUENT,
-    refetchInterval: QUERY_STALE_TIME_FREQUENT,
-    queryFn: () => listDepartmentOptions(token, { limit: 100 }),
-  })
-
   const officesQuery = useQuery({
     queryKey: queryKeys.offices.options(),
     staleTime: QUERY_STALE_TIME_FREQUENT,
@@ -212,7 +203,6 @@ function EmployeesPage({
   const total = usersQuery.data?.total ?? 0
   const totalPages = Math.max(1, usersQuery.data?.totalPages ?? 1)
   const loading = usersQuery.isLoading || (usersQuery.isFetching && users.length === 0)
-  const departments = departmentsQuery.data ?? []
   const offices = officesQuery.data ?? []
   const roleOptions = rolesOptionsQuery.data ?? []
 
@@ -679,7 +669,6 @@ function EmployeesPage({
           {createDialog.data ? (
             <EmployeeFormDialog
               mode="create"
-              departments={departments}
               offices={offices}
               roleOptions={roleOptions}
               busy={busy}
@@ -717,7 +706,6 @@ function EmployeesPage({
               mode="update"
               user={updateDialog.data.user}
               draft={updateDialog.data.draft}
-              departments={departments}
               offices={offices}
               roleOptions={roleOptions}
               busy={busy}
@@ -909,7 +897,6 @@ function EmployeeFormDialog({
   mode,
   user,
   draft,
-  departments,
   offices,
   roleOptions,
   busy,
@@ -920,7 +907,6 @@ function EmployeeFormDialog({
   mode: 'create' | 'update'
   user?: UserRecord
   draft?: UpdatePayload
-  departments: DepartmentOption[]
   offices: OfficeOption[]
   roleOptions?: RoleOption[]
   busy: boolean
@@ -947,13 +933,6 @@ function EmployeeFormDialog({
   )
   const [points, setPoints] = useState(String(draft?.points ?? user?.points ?? 0))
   const [isActive, setIsActive] = useState(draft?.isActive ?? user?.isActive ?? true)
-  const [departmentId, setDepartmentId] = useState(
-    draft?.departmentId != null
-      ? String(draft.departmentId)
-      : user?.departmentId != null
-        ? String(user.departmentId)
-        : 'none',
-  )
   const [selectedOfficeIds, setSelectedOfficeIds] = useState<string[]>(() => {
     const fromDraft = draft?.officeIds
     if (fromDraft) return fromDraft.map(String)
@@ -965,7 +944,7 @@ function EmployeeFormDialog({
     event.preventDefault()
     setFormError(null)
 
-    const resolvedDepartmentId = departmentId === 'none' ? null : Number(departmentId)
+    // Department assignment is managed centrally now; the form no longer sends departmentId.
     const resolvedOfficeIds = selectedOfficeIds
       .map(Number)
       .filter((id) => Number.isFinite(id) && id > 0)
@@ -978,7 +957,6 @@ function EmployeeFormDialog({
         password,
         role,
         email,
-        departmentId: resolvedDepartmentId,
         officeIds: resolvedOfficeIds,
         bio,
       })
@@ -998,7 +976,6 @@ function EmployeeFormDialog({
       email,
       employeeCode,
       points: Number(points),
-      departmentId: resolvedDepartmentId,
       officeIds: resolvedOfficeIds,
       isActive,
       bio,
@@ -1137,23 +1114,6 @@ function EmployeeFormDialog({
               </label>
             </>
           )}
-
-          <div className="flex flex-col gap-1.5 text-[13px] text-muted">
-            <span>الإدارة</span>
-            <Select value={departmentId} onValueChange={setDepartmentId}>
-              <SelectTrigger className="w-full" aria-label="الإدارة">
-                <SelectValue placeholder="بدون إدارة" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">بدون إدارة</SelectItem>
-                {departments.map((d) => (
-                  <SelectItem key={d.id} value={String(d.id)}>
-                    {d.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
 
           <div className="col-span-full flex flex-col gap-1.5 text-[13px] text-muted">
             <span>المكاتب</span>
