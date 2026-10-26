@@ -146,7 +146,6 @@ function SettingsPage({
   const [fullName, setFullName] = useState(profile.fullName)
   const [phoneNumber, setPhoneNumber] = useState(profile.phoneNumber)
   const [email, setEmail] = useState(profile.email ?? '')
-  const [employeeCode, setEmployeeCode] = useState(profile.employeeCode)
   const [bio, setBio] = useState(profile.bio ?? '')
   const [profileError, setProfileError] = useState<string | null>(null)
   const [savingProfile, setSavingProfile] = useState(false)
@@ -166,7 +165,6 @@ function SettingsPage({
     setFullName(profile.fullName)
     setPhoneNumber(profile.phoneNumber)
     setEmail(profile.email ?? '')
-    setEmployeeCode(profile.employeeCode)
     setBio(profile.bio ?? '')
     setProfileError(null)
   }
@@ -191,7 +189,6 @@ function SettingsPage({
     setFullName(profile.fullName)
     setPhoneNumber(profile.phoneNumber)
     setEmail(profile.email ?? '')
-    setEmployeeCode(profile.employeeCode)
     setBio(profile.bio ?? '')
     setProfileError(null)
   }
@@ -214,7 +211,6 @@ function SettingsPage({
       fullName,
       phoneNumber,
       email,
-      employeeCode,
       bio,
     })
     if (!parsed.success) {
@@ -352,10 +348,9 @@ function SettingsPage({
               <FieldLabel htmlFor="settings-employeeCode" label="كود الموظف">
                 <Input
                   id="settings-employeeCode"
-                  value={employeeCode}
-                  readOnly
+                  value={profile.employeeCode}
+                  disabled
                   autoComplete="username"
-                  disabled={savingProfile}
                   title="كود الموظف لا يمكن تغييره"
                 />
               </FieldLabel>
