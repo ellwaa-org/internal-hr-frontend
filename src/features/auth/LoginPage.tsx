@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Eye, EyeOff, UserPlus } from 'lucide-react'
 import logo from '@/assets/logo.webp'
 import { getDeviceId, login, setToken } from '@/lib/api'
-import { loadSsoConfig, startSsoLogin, storeSsoTokens, type SsoConfig } from '@/lib/sso'
+import { loadSsoConfig, storeSsoTokens, type SsoConfig } from '@/lib/sso'
 import { loginSchema, zodErrorMessage } from '@/lib/schemas'
 import { notify } from '@/lib/toast'
 
@@ -59,11 +59,6 @@ function LoginPage({ onLogin }: { onLogin: (token: string) => void }) {
     } finally {
       setLoading(false)
     }
-  }
-
-  const startSso = () => {
-    if (!sso?.enabled) return
-    startSsoLogin('/')
   }
 
   return (
@@ -133,26 +128,16 @@ function LoginPage({ onLogin }: { onLogin: (token: string) => void }) {
         </button>
 
         {sso?.enabled && (
-          <>
-            <button
-              type="button"
-              onClick={startSso}
-              className="w-full cursor-pointer rounded-lg border border-neutral-300 bg-white px-4 py-[11px] text-[15px] font-semibold text-foreground transition-colors hover:bg-neutral-50 active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
-            >
-              الدخول الموحّد (SSO)
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                window.location.assign('/register')
-              }}
-              className="m-0 flex w-full cursor-pointer items-center justify-center gap-1.5 border-none bg-transparent p-0 text-center text-sm font-medium text-muted underline-offset-2 hover:text-foreground hover:underline"
-            >
-              <UserPlus className="h-4 w-4" />
-              ليست لديك حالة؟ إنشاء حساب موحّد
-            </button>
-          </>
+          <button
+            type="button"
+            onClick={() => {
+              window.location.assign('/register')
+            }}
+            className="m-0 flex w-full cursor-pointer items-center justify-center gap-1.5 border-none bg-transparent p-0 text-center text-sm font-medium text-muted underline-offset-2 hover:text-foreground hover:underline"
+          >
+            <UserPlus className="h-4 w-4" />
+            ليست لديك حالة؟ إنشاء حساب موحّد
+          </button>
         )}
 
       </form>
