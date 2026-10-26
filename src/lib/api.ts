@@ -16,7 +16,6 @@ import {
   changePasswordSchema,
   createDepartmentSchema,
   createOfficeSchema,
-  createRoleSchema,
   exportAttendanceExcelParamsSchema,
   listAttendanceParamsSchema,
   listAttendanceUsersParamsSchema,
@@ -31,7 +30,6 @@ import {
   resetPasswordSchema,
   updateDepartmentSchema,
   updateOfficeSchema,
-  updateRoleSchema,
   updateUserSchema,
   updateFieldTaskSchema,
   endFieldTaskSchema,
@@ -51,7 +49,6 @@ import {
   type DeviceSecurityLog,
   type CreateDepartmentInput,
   type CreateOfficeInput,
-  type CreateRoleInput,
   type DayStatus,
   type DepartmentOption,
   type DepartmentRecord,
@@ -82,7 +79,6 @@ import {
   type SecurityLogAttempt,
   type UpdateDepartmentInput,
   type UpdateOfficeInput,
-  type UpdateRoleInput,
   type UpdateUserInput,
   type UpdateFieldTaskInput,
   type EndFieldTaskInput,
@@ -106,7 +102,6 @@ export type {
   ChangePasswordInput,
   CreateDepartmentInput,
   CreateOfficeInput,
-  CreateRoleInput,
   DayStatus,
   DepartmentOption,
   DepartmentRecord,
@@ -137,7 +132,6 @@ export type {
   SecurityLogAttempt,
   UpdateDepartmentInput,
   UpdateOfficeInput,
-  UpdateRoleInput,
   UpdateUserInput,
   UpdateFieldTaskInput,
   EndFieldTaskInput,
@@ -984,6 +978,25 @@ export function updateUser(
   )
 }
 
+/**
+ * Self-service profile update — PATCH /auth/profile.
+ * Only fullName / phoneNumber / email / bio are accepted; the employee code
+ * is immutable from the client and must not be sent.
+ */
+export function updateOwnProfile(
+  token: string,
+  input: { fullName: string; phoneNumber: string; email: string | null; bio: string | null },
+): Promise<unknown> {
+  return request(
+    '/auth/profile',
+    {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    },
+    token,
+  )
+}
+
 export function setUserStatus(
   token: string,
   id: number,
@@ -1083,6 +1096,32 @@ export async function listRoles(
   )
 }
 
+/**
+ * Roles managed in the central Account Manager for the HR system — the Roles
+ * page is a read-only view of these. Local fallback happens server-side.
+ */
+export async function listCentralRoles(
+  token: string,
+  params: ListRolesParams = {},
+): Promise<PaginatedRoles> {
+  const validated = parseOrThrow(listRolesParamsSchema, params)
+  const page = validated.page ?? 1
+  const limit = validated.limit ?? 10
+  const qs = toQuery({
+    page,
+    limit,
+    search: validated.search,
+  })
+  const body = await request<unknown>(`/roles/central${qs}`, {}, token)
+  return normalizePaginated(
+    body,
+    page,
+    limit,
+    ['data', 'roles', 'items', 'results'],
+    asRoleRecord,
+  )
+}
+
 /** Flat options list for selects — fetches a large page. Requires role.readAll. */
 export async function listRoleOptions(
   token: string,
@@ -1098,38 +1137,6 @@ export async function listRoleOptions(
     name: item.name,
     permissionCount: item.permissions.length,
   }))
-}
-
-export function createRole(token: string, input: CreateRoleInput): Promise<RoleRecord | unknown> {
-  const payload = parseOrThrow(createRoleSchema, input)
-  return request(
-    '/roles',
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-    token,
-  )
-}
-
-export function updateRole(
-  token: string,
-  id: number,
-  input: UpdateRoleInput,
-): Promise<RoleRecord | unknown> {
-  const payload = parseOrThrow(updateRoleSchema, input)
-  return request(
-    `/roles/${id}`,
-    {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    },
-    token,
-  )
-}
-
-export function deleteRole(token: string, id: number): Promise<unknown> {
-  return request(`/roles/${id}`, { method: 'DELETE' }, token)
 }
 
 export async function listDepartments(

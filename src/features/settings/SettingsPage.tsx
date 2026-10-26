@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { Eye, EyeOff, KeyRound, Loader2, RotateCcw, Save, Shield, UserRound } from 'lucide-react'
-import { changePassword, getProfile, updateUser, type Profile } from '@/lib/api'
+import { changePassword, getProfile, updateOwnProfile, type Profile } from '@/lib/api'
 import { errorMessageFromUnknown, isForbiddenError, isUnauthorizedError } from '@/lib/errors'
 import { roleLabel } from '@/lib/permissions'
 import { changePasswordSchema, updateUserSchema, zodErrorMessage } from '@/lib/schemas'
@@ -175,7 +175,6 @@ function SettingsPage({
     fullName.trim() !== profile.fullName ||
     phoneNumber.trim() !== profile.phoneNumber ||
     (email.trim() || null) !== (profile.email ?? null) ||
-    employeeCode.trim() !== profile.employeeCode ||
     (bio.trim() || null) !== (profile.bio ?? null)
 
   const passwordDirty =
@@ -233,7 +232,12 @@ function SettingsPage({
     setSavingProfile(true)
     const toastId = notify.loading('جارٍ حفظ بيانات الحساب...')
     try {
-      await updateUser(token, profile.id, parsed.data)
+      await updateOwnProfile(token, {
+        fullName: parsed.data.fullName ?? fullName,
+        phoneNumber: parsed.data.phoneNumber ?? phoneNumber,
+        email: parsed.data.email ?? null,
+        bio: parsed.data.bio ?? null,
+      })
       const refreshed = await getProfile(token)
       onProfileUpdated(refreshed)
       notify.dismiss(toastId)
@@ -349,9 +353,10 @@ function SettingsPage({
                 <Input
                   id="settings-employeeCode"
                   value={employeeCode}
-                  onChange={(e) => setEmployeeCode(e.target.value)}
+                  readOnly
                   autoComplete="username"
                   disabled={savingProfile}
+                  title="كود الموظف لا يمكن تغييره"
                 />
               </FieldLabel>
 
