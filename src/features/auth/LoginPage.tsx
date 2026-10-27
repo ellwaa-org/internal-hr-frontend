@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Eye, EyeOff, UserPlus } from 'lucide-react'
 import logo from '@/assets/logo.webp'
-import { getDeviceId, login, setToken } from '@/lib/api'
+import { getDeviceId, login, setRefreshToken, setToken } from '@/lib/api'
 import { loadSsoConfig, storeSsoTokens, type SsoConfig } from '@/lib/sso'
 import { loginSchema, zodErrorMessage } from '@/lib/schemas'
 import { notify } from '@/lib/toast'
@@ -44,6 +44,12 @@ function LoginPage({ onLogin }: { onLogin: (token: string) => void }) {
     const toastId = notify.loading('جارٍ تسجيل الدخول...')
     try {
       const session = await login(parsed.data)
+      // Central logins return an AM refresh token — keep it so the request
+      // helper (and the SSO store below) can renew the 15-minute session
+      // token silently.
+      if (session.refreshToken) {
+        setRefreshToken(session.refreshToken)
+      }
       // Global credentials: keep the refresh token so the SSO silent refresh
       // keeps the session alive, exactly like the SSO redirect flow.
       if (sso?.enabled && session.refreshToken) {

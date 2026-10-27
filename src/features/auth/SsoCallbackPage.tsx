@@ -8,7 +8,7 @@ import {
   loadSsoConfig,
   startSsoLogin,
 } from '@/lib/sso'
-import { setToken } from '@/lib/api'
+import { setRefreshToken, setToken } from '@/lib/api'
 import { notify } from '@/lib/toast'
 
 /**
@@ -71,6 +71,7 @@ function SsoCallbackPage({ onLogin }: { onLogin: (token: string) => void }) {
       .then((result) => {
         clearSsoState()
         setToken(result.accessToken)
+        if (result.refreshToken) setRefreshToken(result.refreshToken)
         notify.success('تم تسجيل الدخول بنجاح', 'مرحباً بك في نظام الموارد البشرية.')
         onLogin(result.accessToken)
         window.location.replace(consumeSsoReturnTo())
