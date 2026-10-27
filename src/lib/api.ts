@@ -7,6 +7,9 @@ const API_BASE = (
 ).replace(/\/$/, '')
 
 const TOKEN_KEY = 'hr_access_token'
+const REFRESH_TOKEN_KEY = 'hr_refresh_token'
+/** Same store src/lib/sso.ts uses — kept in sync here without an import cycle. */
+const SSO_TOKENS_KEY = 'hr-sso-tokens'
 const DEVICE_KEY = 'hr_device_id'
 
 import { ApiError, isNotFoundError, translateErrorMessage } from './errors'
@@ -146,6 +149,163 @@ export function setToken(token: string) {
 
 export function clearToken() {
   localStorage.removeItem(TOKEN_KEY)
+  // The refresh token belongs to the same session — never leave it behind
+  // when the access token is dropped (sign-out, terminal 401).
+  localStorage.removeItem(REFRESH_TOKEN_KEY)
+}
+
+export function getRefreshToken(): string | null {
+  return localStorage.getItem(REFRESH_TOKEN_KEY)
+}
+
+export function setRefreshToken(token: string) {
+  localStorage.setItem(REFRESH_TOKEN_KEY, token)
+}
+
+export function clearRefreshToken() {
+  localStorage.removeItem(REFRESH_TOKEN_KEY)
+}
+
+/* ---------- Central (AM) session refresh ---------- */
+
+interface StoredSsoTokens {
+  accessToken: string
+  refreshToken: string | null
+}
+
+function readSsoTokens(): StoredSsoTokens | null {
+  try {
+    const raw = localStorage.getItem(SSO_TOKENS_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<StoredSsoTokens>
+    if (parsed?.accessToken) {
+      return { accessToken: parsed.accessToken, refreshToken: parsed.refreshToken ?? null }
+    }
+  } catch {
+    /* malformed store — ignore */
+  }
+  return null
+}
+
+function updateSsoTokens(patch: { accessToken?: string; refreshToken?: string }): void {
+  const existing = readSsoTokens()
+  if (!existing) return // SSO flow not in use — nothing to keep in sync
+  try {
+    localStorage.setItem(
+      SSO_TOKENS_KEY,
+      JSON.stringify({
+        accessToken: patch.accessToken ?? existing.accessToken,
+        refreshToken: patch.refreshToken ?? existing.refreshToken,
+      }),
+    )
+  } catch {
+    /* private mode — ignore */
+  }
+}
+
+function clearSsoTokens(): void {
+  try {
+    localStorage.removeItem(SSO_TOKENS_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Best-known refresh token: the api-level mirror first, then the SSO store. */
+function currentRefreshToken(): string | null {
+  return getRefreshToken() ?? readSsoTokens()?.refreshToken ?? null
+}
+
+/** Decode a JWT payload and return its `exp` as epoch ms (null when absent/malformed). */
+function jwtExpiresAtMs(token: string): number | null {
+  try {
+    const segment = token.split('.')[1]
+    if (!segment) return null
+    const base64 = segment.replace(/-/g, '+').replace(/_/g, '/')
+    const payload = JSON.parse(atob(base64 + '='.repeat((4 - (base64.length % 4)) % 4))) as {
+      exp?: unknown
+    }
+    return typeof payload.exp === 'number' && Number.isFinite(payload.exp)
+      ? payload.exp * 1000
+      : null
+  } catch {
+    return null
+  }
+}
+
+/** True when the token carries an `exp` within 30s of now (or past it). */
+export function isTokenExpired(token: string, leewayMs = 30_000): boolean {
+  const expiresAt = jwtExpiresAtMs(token)
+  return expiresAt !== null && expiresAt <= Date.now() + leewayMs
+}
+
+/**
+ * Prefer the freshest access token among the caller-provided one and the
+ * storage mirrors — a silent refresh may have renewed storage while a
+ * component still holds an older token.
+ */
+function pickFreshToken(passed?: string | null): string | null {
+  let stale: string | null = null
+  for (const candidate of [passed, getToken(), readSsoTokens()?.accessToken]) {
+    if (!candidate) continue
+    if (!isTokenExpired(candidate)) return candidate
+    stale ??= candidate
+  }
+  return stale
+}
+
+let refreshInFlight: Promise<string | null> | null = null
+
+async function performRefresh(): Promise<string | null> {
+  const refreshToken = currentRefreshToken()
+  if (!refreshToken) return null
+  try {
+    // Raw fetch: the refresh call itself must never trigger the request
+    // helper's refresh logic (no recursion, no Authorization header).
+    const res = await fetch(`${API_BASE}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    })
+    if (!res.ok) {
+      // Definitive rejection — drop the stored refresh material so we stop
+      // retrying a dead token. Network hiccups (5xx / TypeError) keep it.
+      if (res.status === 400 || res.status === 401) {
+        clearRefreshToken()
+        clearSsoTokens()
+      }
+      return null
+    }
+    const body = (await res.json().catch(() => ({}))) as {
+      accessToken?: string
+      refreshToken?: string
+      data?: { accessToken?: string; refreshToken?: string }
+    }
+    const accessToken = body.accessToken ?? body.data?.accessToken
+    if (!accessToken) return null
+    // The AM rotates refresh tokens — persist whichever it returned.
+    const rotated = body.refreshToken ?? body.data?.refreshToken
+    setToken(accessToken)
+    if (rotated) setRefreshToken(rotated)
+    updateSsoTokens({ accessToken, ...(rotated ? { refreshToken: rotated } : {}) })
+    return accessToken
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Single-flight silent session refresh via POST /auth/refresh. Concurrent
+ * callers share one in-flight promise and the AM's rotated refresh token is
+ * persisted before it resolves, so the token is never reused.
+ */
+export function refreshSession(): Promise<string | null> {
+  if (!refreshInFlight) {
+    refreshInFlight = performRefresh().finally(() => {
+      refreshInFlight = null
+    })
+  }
+  return refreshInFlight
 }
 
 export function getDeviceId(): string {
@@ -189,14 +349,37 @@ async function request<T>(
   init: RequestInit = {},
   token?: string | null,
 ): Promise<T> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(init.headers as Record<string, string>),
+  const buildHeaders = (accessToken?: string | null): Record<string, string> => {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(init.headers as Record<string, string>),
+    }
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`
+    return headers
   }
-  if (token) headers.Authorization = `Bearer ${token}`
 
   const url = path.startsWith('http') ? path : `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`
-  const res = await fetch(url, { ...init, headers })
+
+  // Access token is expired (or about to within 30s) and a refresh token
+  // exists: renew it silently before the call. Central (AM) sessions only —
+  // local JWTs have no refresh token and keep the plain behavior.
+  let accessToken = pickFreshToken(token)
+  if (accessToken && isTokenExpired(accessToken) && currentRefreshToken()) {
+    const renewed = await refreshSession()
+    if (renewed) accessToken = renewed
+  }
+
+  let res = await fetch(url, { ...init, headers: buildHeaders(accessToken) })
+
+  // 401 with a refresh token on hand: one silent refresh, one retry — never
+  // a loop. Without a refresh token the 401 falls through unchanged. The
+  // login endpoint is exempt: its 401 means bad credentials, not expiry.
+  if (res.status === 401 && path !== '/auth/login' && currentRefreshToken()) {
+    const renewed = await refreshSession()
+    if (renewed) {
+      res = await fetch(url, { ...init, headers: buildHeaders(renewed) })
+    }
+  }
 
   if (!res.ok) {
     let message = translateErrorMessage(`Request failed (${res.status})`, res.status)
@@ -1467,7 +1650,7 @@ async function downloadBinary(
     ? path
     : `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`
   const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${pickFreshToken(token) ?? ''}` },
   })
 
   if (!res.ok) {

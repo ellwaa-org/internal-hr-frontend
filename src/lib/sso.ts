@@ -1,4 +1,4 @@
-import { getSsoConfig, ssoCallback, ssoRefresh, ssoLogout } from '@/lib/api'
+import { getSsoConfig, ssoCallback, ssoLogout, refreshSession } from '@/lib/api'
 
 /**
  * Central SSO (Account Manager IdP) client for the HR satellite.
@@ -183,33 +183,19 @@ export async function completeSsoLogin(code: string): Promise<SsoLoginResult> {
   return body.data
 }
 
-let refreshInFlight: Promise<string | null> | null = null
-
-/** Single-flight silent refresh; resolves the new access token or null. */
+/**
+ * Single-flight silent refresh; resolves the new access token or null.
+ *
+ * Delegates to the shared refreshSession() in api.ts so the App-shell timer
+ * and the request helper share ONE in-flight refresh and ONE rotating refresh
+ * token — two independent refreshers would reuse (and invalidate) the AM's
+ * rotated token. refreshSession persists the new tokens into both the SSO
+ * store and the api-level mirror, and clears them on definitive rejection.
+ */
 export async function silentRefresh(): Promise<string | null> {
   const tokens = getSsoTokens()
   if (!tokens?.refreshToken) return null
-  if (refreshInFlight) return refreshInFlight
-
-  refreshInFlight = (async () => {
-    try {
-      const body = (await ssoRefresh(tokens.refreshToken as string)) as {
-        data: { accessToken: string; refreshToken?: string }
-      }
-      storeSsoTokens({
-        accessToken: body.data.accessToken,
-        refreshToken: body.data.refreshToken ?? tokens.refreshToken,
-      })
-      return body.data.accessToken
-    } catch {
-      clearSsoTokens()
-      return null
-    } finally {
-      refreshInFlight = null
-    }
-  })()
-
-  return refreshInFlight
+  return refreshSession()
 }
 
 export async function ssoSignOut(): Promise<void> {
