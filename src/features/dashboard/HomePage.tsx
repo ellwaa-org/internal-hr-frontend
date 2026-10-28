@@ -70,7 +70,7 @@ const NAV_ICONS: Record<NavPage, typeof Users> = {
 }
 
 const NAV_GROUPS: { label: string; pages: NavPage[] }[] = [
-  { label: 'الرئيسية', pages: ['employees', 'departments', 'offices', 'roles', 'auditLogs'] },
+  { label: 'الرئيسية', pages: ['employees', 'departments', 'offices', 'auditLogs'] },
   { label: 'العمليات', pages: ['attendance', 'tasks', 'settings'] },
 ]
 
