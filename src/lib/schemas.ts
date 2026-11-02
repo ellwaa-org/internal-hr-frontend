@@ -423,6 +423,8 @@ export const userRecordSchema = z.object({
   phoneNumber: z.string(),
   email: z.string().nullable(),
   role: roleSchema,
+  /** ALL central (AM) roles assigned for HR; `role` is primary. */
+  roles: z.array(z.string()).optional(),
   permissions: z.array(z.string()),
   /** = permissions.includes('dashboard.access'); only auth endpoints send it. */
   canAccessDashboard: z.boolean().optional(),
