@@ -476,7 +476,18 @@ function EmployeesPage({
                       {user.employeeCode}
                     </code>
                   </Td>
-                  <Td className="whitespace-nowrap">{roleLabel(user.role)}</Td>
+                  <Td className="whitespace-nowrap">
+                    <span className="flex flex-wrap gap-1">
+                      {(user.roles?.length ? user.roles : [user.role]).map((r) => (
+                        <span
+                          key={r}
+                          className="rounded-md bg-neutral-100 px-1.5 py-0.5 text-xs font-medium text-foreground"
+                        >
+                          {roleLabel(r)}
+                        </span>
+                      ))}
+                    </span>
+                  </Td>
                   <Td className="whitespace-nowrap text-muted">{user.phoneNumber || '—'}</Td>
                   <Td>
                     <span className="block max-w-[240px] truncate text-muted" title={user.email || undefined}>

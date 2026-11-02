@@ -501,6 +501,8 @@ export interface SsoCallbackResult {
       id: number
       employeeCode: string
       role: string
+      /** ALL central (AM) roles assigned for HR; `role` is primary. */
+      roles?: string[] | null
       fullName: string
       permissions?: string[]
       canAccessDashboard?: boolean
@@ -638,6 +640,9 @@ function asUserRecord(raw: Record<string, unknown>): UserRecord {
     phoneNumber: String(raw.phoneNumber ?? ''),
     email: (raw.email as string | null) ?? null,
     role: typeof raw.role === 'string' && raw.role.trim() ? raw.role : 'EMPLOYEE',
+    roles: Array.isArray(raw.roles)
+      ? (raw.roles as unknown[]).filter((r): r is string => typeof r === 'string' && r.length > 0)
+      : undefined,
     permissions: asPermissionList(raw.permissions),
     employeeCode: String(raw.employeeCode ?? raw.code ?? ''),
     deviceId: (raw.deviceId as string | null) ?? null,
