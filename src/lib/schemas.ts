@@ -171,6 +171,8 @@ export const listUsersParamsSchema = z.object({
   officeId: z.number().int().positive().optional(),
   isActive: z.boolean().optional(),
   search: z.string().trim().optional(),
+  /** Only users with at least N consecutive absent days this month. */
+  absentStreak: z.number().int().min(1).max(31).optional(),
 })
 
 /* ---------- Roles CRUD (permission-based RBAC) ---------- */
@@ -441,6 +443,29 @@ export const userRecordSchema = z.object({
   offices: z.array(officeOptionSchema).optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
+  /** Consecutive-absence streak info (current month) — GET /auth/users. */
+  consecutiveAbsenceDays: z.number().optional(),
+  absentSevenConsecutiveDays: z.boolean().optional(),
+  consecutiveAbsence: z
+    .object({
+      startDate: z.string(),
+      endDate: z.string(),
+      days: z.number(),
+    })
+    .nullable()
+    .optional(),
+  absentDaysThisMonth: z.array(z.string()).optional(),
+  absenceReviewStatus: z.enum(['pending', 'approved', 'rejected']).nullable().optional(),
+  absentDayReviews: z
+    .record(
+      z.string(),
+      z.object({
+        status: z.enum(['pending', 'approved', 'rejected']),
+        note: z.string().nullable(),
+        reviewedAt: z.string().nullable().optional(),
+      }),
+    )
+    .optional(),
 })
 
 export const departmentRecordSchema = z.object({

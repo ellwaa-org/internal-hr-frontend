@@ -663,7 +663,46 @@ function asUserRecord(raw: Record<string, unknown>): UserRecord {
     offices,
     createdAt: raw.createdAt as string | undefined,
     updatedAt: raw.updatedAt as string | undefined,
+    consecutiveAbsenceDays:
+      raw.consecutiveAbsenceDays === null || raw.consecutiveAbsenceDays === undefined
+        ? undefined
+        : Number(raw.consecutiveAbsenceDays),
+    absentSevenConsecutiveDays: Boolean(raw.absentSevenConsecutiveDays),
+    consecutiveAbsence:
+      raw.consecutiveAbsence && typeof raw.consecutiveAbsence === 'object'
+        ? {
+            startDate: String((raw.consecutiveAbsence as Record<string, unknown>).startDate ?? ''),
+            endDate: String((raw.consecutiveAbsence as Record<string, unknown>).endDate ?? ''),
+            days: Number((raw.consecutiveAbsence as Record<string, unknown>).days ?? 0),
+          }
+        : null,
+    absentDaysThisMonth: Array.isArray(raw.absentDaysThisMonth)
+      ? (raw.absentDaysThisMonth as unknown[]).filter((d): d is string => typeof d === 'string')
+      : undefined,
+    absenceReviewStatus:
+      raw.absenceReviewStatus === 'pending' ||
+      raw.absenceReviewStatus === 'approved' ||
+      raw.absenceReviewStatus === 'rejected'
+        ? raw.absenceReviewStatus
+        : null,
+    absentDayReviews: buildAbsentDayReviews(raw.absentDayReviews),
   }
+}
+
+function buildAbsentDayReviews(value: unknown): UserRecord['absentDayReviews'] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const result: NonNullable<UserRecord['absentDayReviews']> = {}
+  for (const [date, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (!entry || typeof entry !== 'object') continue
+    const e = entry as { status?: unknown; note?: unknown; reviewedAt?: unknown }
+    if (e.status !== 'pending' && e.status !== 'approved' && e.status !== 'rejected') continue
+    result[date] = {
+      status: e.status,
+      note: e.note == null ? null : String(e.note),
+      reviewedAt: e.reviewedAt == null ? null : String(e.reviewedAt),
+    }
+  }
+  return result
 }
 
 type OfficeIdentity = {
@@ -1131,6 +1170,7 @@ export async function listUsers(
     officeId: validated.officeId,
     isActive: validated.isActive,
     search: validated.search,
+    absentStreak: validated.absentStreak,
   })
   const body = await request<unknown>(`/auth/users${qs}`, {}, token)
   return normalizePaginated(body, page, limit, ['data', 'users', 'items', 'results'], asUserRecord)
@@ -1769,6 +1809,46 @@ export function reviewEarlyLeaveJustification(
     {
       method: 'PATCH',
       body: JSON.stringify({ status }),
+    },
+    token,
+  )
+}
+
+/** Accept/refuse a user's 7-consecutive-absent-days streak for this month. */
+export function reviewAbsenceStreak(
+  token: string,
+  userId: number,
+  status: 'approved' | 'rejected',
+  note?: string,
+): Promise<unknown> {
+  return request(
+    `/auth/users/${userId}/absence-review`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ status, ...(note ? { note } : {}) }),
+    },
+    token,
+  )
+}
+
+/**
+ * Accept/refuse individual absent days. Omit `dates` to decide ALL the
+ * user's absent work days of the current month in one call.
+ */
+export function reviewAbsenceDays(
+  token: string,
+  userId: number,
+  status: 'approved' | 'rejected',
+  options: { dates?: string[]; note?: string } = {},
+): Promise<unknown> {
+  const payload: Record<string, unknown> = { status }
+  if (options.dates?.length) payload.dates = options.dates
+  if (options.note) payload.note = options.note
+  return request(
+    `/auth/users/${userId}/absence-days/review`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
     },
     token,
   )

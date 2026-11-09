@@ -12,6 +12,7 @@ import {
   RotateCcw,
   ShieldAlert,
   Smartphone,
+  ClipboardCheck,
   Trash2,
   UserPlus,
 } from 'lucide-react'
@@ -83,6 +84,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { SecurityLogsDialog } from '@/features/employees/SecurityLogsDialog'
+import { AbsenceStreakPanel } from '@/features/employees/AbsenceStreakPanel'
+import { UserReviewDialog } from '@/features/employees/UserReviewDialog'
 
 type UpdatePayload = UpdateUserInput
 
@@ -93,6 +96,7 @@ type ModalMode =
   | { type: 'confirm-update'; user: UserRecord; update: UpdatePayload }
   | { type: 'reset-password'; user: UserRecord }
   | { type: 'security-logs'; user: UserRecord }
+  | { type: 'review'; user: UserRecord }
   | { type: 'restore' }
   | { type: 'confirm'; action: ConfirmAction; user: UserRecord }
 
@@ -136,8 +140,9 @@ function EmployeesPage({
   const canResetDevice = hasPermission(permissions, 'user.resetDevice')
   const canReadSecurityLogs = hasPermission(permissions, 'securityLog.read')
   const canListRoles = hasPermission(permissions, 'role.readAll')
+  const canReviewAttendance = hasPermission(permissions, 'attendance.justificationManage')
   const hasRowActions =
-    canUpdate || canToggleStatus || canDelete || canResetPassword || canResetDevice || canReadSecurityLogs
+    canUpdate || canToggleStatus || canDelete || canResetPassword || canResetDevice || canReadSecurityLogs || canReviewAttendance
 
   const handleApiError = useCallback(
     (err: unknown, fallback: string) => {
@@ -220,6 +225,7 @@ function EmployeesPage({
   const confirmUpdateDialog = useDialogState(modal?.type === 'confirm-update' ? modal : null)
   const resetPasswordDialog = useDialogState(modal?.type === 'reset-password' ? modal : null)
   const securityLogsDialog = useDialogState(modal?.type === 'security-logs' ? modal : null)
+  const reviewDialog = useDialogState(modal?.type === 'review' ? modal : null)
   const restoreDialog = useDialogState(modal?.type === 'restore' ? modal : null)
 
   const runRestore = async (employeeCode: string) => {
@@ -424,6 +430,12 @@ function EmployeesPage({
         </div>
       </FiltersBar>
 
+      <AbsenceStreakPanel
+        token={token}
+        canReview={canReviewAttendance}
+        onOpenReview={(user) => setModal({ type: 'review', user })}
+      />
+
       <TableSection
         footer={
           <PaginationBar
@@ -566,6 +578,12 @@ function EmployeesPage({
                               سجلات الأمان
                             </DropdownMenuItem>
                           )}
+                          {canReviewAttendance && (
+                            <DropdownMenuItem onSelect={() => setModal({ type: 'review', user })}>
+                              <ClipboardCheck />
+                              قبول/رفض الغياب والتأخير والانصراف المبكر
+                            </DropdownMenuItem>
+                          )}
                           {canDelete && (
                             <>
                               <DropdownMenuSeparator />
@@ -666,6 +684,16 @@ function EmployeesPage({
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <UserReviewDialog
+        open={reviewDialog.open}
+        onOpenChange={(open) => {
+          if (!open) closeModal()
+        }}
+        token={token}
+        user={reviewDialog.data?.user ?? null}
+        onUnauthorized={onUnauthorized}
+      />
 
       <Dialog open={restoreDialog.open} onOpenChange={(open) => !open && closeModal()}>
         <DialogContent>

@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
-import { getUserAttendance, type AttendanceRecord } from '@/lib/api'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Check, ChevronLeft, ChevronRight, Loader2, X } from 'lucide-react'
+import {
+  getUserAttendance,
+  reviewAbsenceDays,
+  reviewEarlyLeaveJustification,
+  reviewLateJustification,
+  type AttendanceRecord,
+} from '@/lib/api'
 import {
   cycleContainingIso,
   cycleEndIso,
@@ -17,6 +23,7 @@ import {
 import { queryKeys, QUERY_STALE_TIME_FREQUENT } from '@/lib/query-client'
 import { notify } from '@/lib/toast'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 
 export type AttendanceCalendarUser = {
   id: number
@@ -174,13 +181,19 @@ export function AttendanceCalendar({
   token,
   user,
   initialDate,
+  canReview = false,
 }: {
   token: string
   user: AttendanceCalendarUser
   initialDate: string
+  canReview?: boolean
 }) {
   const today = useMemo(() => todayIsoDate(), [])
+  const queryClient = useQueryClient()
   const [selectedDate, setSelectedDate] = useState(initialDate)
+  const [busyKey, setBusyKey] = useState<string | null>(null)
+  /** Local mirror of admin decisions on absent days: date → status. */
+  const [absentDecisions, setAbsentDecisions] = useState<Record<string, 'approved' | 'rejected'>>({})
   const [cycleFrom, setCycleFrom] = useState(() => cycleContainingIso(initialDate).from)
   const cycleTo = cycleEndIso(cycleFrom)
   const [activeStatus, setActiveStatus] = useState<AttendanceDayStatus | null>(null)
@@ -209,6 +222,47 @@ export function AttendanceCalendar({
   )
 
   const weeks = useMemo(() => buildCycleWeeks(cycleFrom, cycleTo), [cycleFrom, cycleTo])
+
+  const runReview = async (key: string, action: () => Promise<unknown>, doneMessage: string) => {
+    setBusyKey(key)
+    const toastId = notify.loading('جارٍ الحفظ...')
+    try {
+      await action()
+      notify.dismiss(toastId)
+      notify.success(doneMessage)
+      await queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all })
+    } catch (err) {
+      notify.dismiss(toastId)
+      notify.error(err, 'تعذر تحديث المراجعة')
+    } finally {
+      setBusyKey(null)
+    }
+  }
+
+  const reviewJustification = (
+    record: AttendanceRecord,
+    kind: 'late' | 'early',
+    next: 'approved' | 'rejected',
+  ) =>
+    runReview(
+      `${record.id}-${kind}-${next}`,
+      () =>
+        kind === 'late'
+          ? reviewLateJustification(token, record.id, next)
+          : reviewEarlyLeaveJustification(token, record.id, next),
+      next === 'approved' ? 'تم القبول' : 'تم الرفض',
+    )
+
+  const reviewAbsentDay = (date: string, next: 'approved' | 'rejected') =>
+    runReview(
+      `absent-${date}-${next}`,
+      async () => {
+        await reviewAbsenceDays(token, user.id, next, { dates: [date] })
+        setAbsentDecisions((current) => ({ ...current, [date]: next }))
+      },
+      next === 'approved' ? 'تم قبول الغياب' : 'تم رفض الغياب',
+    )
+
   const selectedDay = statusByDate.get(selectedDate)
   const filteredDays = useMemo(() => {
     if (!activeStatus) return []
@@ -377,7 +431,15 @@ export function AttendanceCalendar({
           <p className="m-0 mb-2 text-[13px] font-semibold text-foreground">
             {formatDate(selectedDate)}
           </p>
-          <DayDetails records={selectedDay.records} statuses={selectedDay.statuses} />
+          <DayDetails
+            records={selectedDay.records}
+            statuses={selectedDay.statuses}
+            canReview={canReview}
+            busyKey={busyKey}
+            absentStatus={absentDecisions[selectedDate] ?? null}
+            onReviewJustification={reviewJustification}
+            onReviewAbsent={selectedDate < today ? (next) => reviewAbsentDay(selectedDate, next) : undefined}
+          />
         </div>
       ) : null}
     </div>
@@ -405,68 +467,216 @@ function DaySummary({
   return <span className="tabular-nums text-muted">{formatTime12(onTime?.checkInAt)}</span>
 }
 
+function ReviewStatusPill({ status }: { status: 'approved' | 'rejected' }) {
+  return (
+    <span
+      className={cn(
+        'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+        status === 'approved' ? 'bg-success-soft text-success' : 'bg-danger-soft text-red-700',
+      )}
+    >
+      {status === 'approved' ? 'مقبول' : 'مرفوض'}
+    </span>
+  )
+}
+
+function ReviewButtons({
+  busy,
+  onApprove,
+  onReject,
+  label,
+}: {
+  busy: boolean
+  onApprove: () => void
+  onReject: () => void
+  label: string
+}) {
+  return (
+    <span className="flex items-center gap-1">
+      <Button
+        type="button"
+        variant="primary"
+        size="sm"
+        className="h-7 w-7 p-0"
+        disabled={busy}
+        onClick={onApprove}
+        aria-label={`قبول ${label}`}
+        title={`قبول ${label}`}
+      >
+        {busy ? <Loader2 className="animate-spin" /> : <Check />}
+      </Button>
+      <Button
+        type="button"
+        variant="danger"
+        size="sm"
+        className="h-7 w-7 p-0"
+        disabled={busy}
+        onClick={onReject}
+        aria-label={`رفض ${label}`}
+        title={`رفض ${label}`}
+      >
+        {busy ? <Loader2 className="animate-spin" /> : <X />}
+      </Button>
+    </span>
+  )
+}
+
+const undecided = (status?: string | null) => status !== 'approved' && status !== 'rejected'
+
 function DayDetails({
   records,
   statuses,
+  canReview,
+  busyKey,
+  absentStatus,
+  onReviewJustification,
+  onReviewAbsent,
 }: {
   records: AttendanceRecord[]
   statuses: AttendanceDayStatus[]
+  canReview: boolean
+  busyKey: string | null
+  /** Admin decision on this absent day (only kept locally after an action). */
+  absentStatus: 'approved' | 'rejected' | null
+  onReviewJustification: (
+    record: AttendanceRecord,
+    kind: 'late' | 'early',
+    next: 'approved' | 'rejected',
+  ) => void
+  onReviewAbsent?: (next: 'approved' | 'rejected') => void
 }) {
   const pool = pickOfficeRecords(records)
   if (statuses.includes('absent') && pool.every((record) => !record.checkInAt)) {
-    return <p className="m-0 text-[12px] text-muted">لم يسجّل حضور في هذا اليوم.</p>
+    return (
+      <div className="flex flex-col gap-2">
+        <p className="m-0 text-[12px] text-muted">لم يسجّل حضور في هذا اليوم.</p>
+        {canReview && onReviewAbsent ? (
+          absentStatus ? (
+            <p className="m-0 flex items-center gap-2 text-[12px] text-muted">
+              مراجعة الغياب: <ReviewStatusPill status={absentStatus} />
+            </p>
+          ) : (
+            <span className="flex items-center justify-between gap-2">
+              <span className="text-[12px] text-muted">مراجعة الغياب</span>
+              <ReviewButtons
+                busy={busyKey !== null}
+                onApprove={() => onReviewAbsent('approved')}
+                onReject={() => onReviewAbsent('rejected')}
+                label="الغياب"
+              />
+            </span>
+          )
+        ) : null}
+      </div>
+    )
   }
 
   return (
     <div className="flex flex-col gap-2">
-      {pool.map((record) => (
-        <div
-          key={record.id}
-          className="flex flex-col gap-1 rounded-lg border border-border bg-[#fcfcfc] px-2.5 py-2"
-        >
-          <span className="flex items-center justify-between gap-2 text-[12px]">
-            <span className="text-muted">الحضور</span>
-            <span className="tabular-nums font-medium text-foreground">
-              {formatTime12(record.checkInAt)}
+      {pool.map((record) => {
+        const lateOpen = record.isLate && undecided(record.lateJustificationStatus)
+        const earlyOpen = record.isEarlyLeave && undecided(record.earlyLeaveJustificationStatus)
+        return (
+          <div
+            key={record.id}
+            className="flex flex-col gap-1 rounded-lg border border-border bg-[#fcfcfc] px-2.5 py-2"
+          >
+            <span className="flex items-center justify-between gap-2 text-[12px]">
+              <span className="text-muted">الحضور</span>
+              <span className="tabular-nums font-medium text-foreground">
+                {formatTime12(record.checkInAt)}
+              </span>
             </span>
-          </span>
-          <span className="flex items-center justify-between gap-2 text-[12px]">
-            <span className="text-muted">الانصراف</span>
-            <span className="tabular-nums font-medium text-foreground">
-              {formatTime12(record.checkOutAt)}
+            <span className="flex items-center justify-between gap-2 text-[12px]">
+              <span className="text-muted">الانصراف</span>
+              <span className="tabular-nums font-medium text-foreground">
+                {formatTime12(record.checkOutAt)}
+              </span>
             </span>
-          </span>
-          <span className="flex flex-wrap gap-1 pt-0.5">
-            {record.isLate ? (
-              <span className="inline-flex items-center gap-1 text-[11px] text-warning">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#f59e0b]" />
-                تأخير حضور
-              </span>
-            ) : record.checkInAt ? (
-              <span className="inline-flex items-center gap-1 text-[11px] text-success">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#22c55e]" />
-                حضور في الموعد
-              </span>
+            <span className="flex flex-wrap gap-1 pt-0.5">
+              {record.isLate ? (
+                <span className="inline-flex items-center gap-1 text-[11px] text-warning">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#f59e0b]" />
+                  تأخير حضور
+                </span>
+              ) : record.checkInAt ? (
+                <span className="inline-flex items-center gap-1 text-[11px] text-success">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#22c55e]" />
+                  حضور في الموعد
+                </span>
+              ) : null}
+              {record.isEarlyLeave ? (
+                <span className="inline-flex items-center gap-1 text-[11px] text-[#7e22ce]">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#a855f7]" />
+                  انصراف مبكر
+                </span>
+              ) : null}
+            </span>
+            {record.lateReason ? (
+              <p className="m-0 text-[12px] text-muted">
+                تبرير التأخير: <span className="text-foreground">{record.lateReason}</span>
+              </p>
             ) : null}
-            {record.isEarlyLeave ? (
-              <span className="inline-flex items-center gap-1 text-[11px] text-[#7e22ce]">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#a855f7]" />
-                انصراف مبكر
-              </span>
+            {record.earlyLeaveReason ? (
+              <p className="m-0 text-[12px] text-muted">
+                تبرير الانصراف: <span className="text-foreground">{record.earlyLeaveReason}</span>
+              </p>
             ) : null}
-          </span>
-          {record.lateReason ? (
-            <p className="m-0 text-[12px] text-muted">
-              تبرير التأخير: <span className="text-foreground">{record.lateReason}</span>
-            </p>
-          ) : null}
-          {record.earlyLeaveReason ? (
-            <p className="m-0 text-[12px] text-muted">
-              تبرير الانصراف: <span className="text-foreground">{record.earlyLeaveReason}</span>
-            </p>
-          ) : null}
-        </div>
-      ))}
+            {canReview && (lateOpen || earlyOpen) ? (
+              <div className="flex flex-col gap-1.5 border-t border-border pt-1.5">
+                {lateOpen ? (
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="text-[12px] text-muted">مراجعة التأخير</span>
+                    <ReviewButtons
+                      busy={busyKey !== null}
+                      onApprove={() => onReviewJustification(record, 'late', 'approved')}
+                      onReject={() => onReviewJustification(record, 'late', 'rejected')}
+                      label="التأخير"
+                    />
+                  </span>
+                ) : null}
+                {earlyOpen ? (
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="text-[12px] text-muted">مراجعة الانصراف المبكر</span>
+                    <ReviewButtons
+                      busy={busyKey !== null}
+                      onApprove={() => onReviewJustification(record, 'early', 'approved')}
+                      onReject={() => onReviewJustification(record, 'early', 'rejected')}
+                      label="الانصراف المبكر"
+                    />
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+            {canReview && !lateOpen && !earlyOpen && (record.isLate || record.isEarlyLeave) ? (
+              <p className="m-0 flex flex-wrap items-center gap-2 text-[12px] text-muted">
+                {record.isLate ? (
+                  <>
+                    التأخير:
+                    <ReviewStatusPill
+                      status={
+                        record.lateJustificationStatus === 'rejected' ? 'rejected' : 'approved'
+                      }
+                    />
+                  </>
+                ) : null}
+                {record.isEarlyLeave ? (
+                  <>
+                    الانصراف المبكر:
+                    <ReviewStatusPill
+                      status={
+                        record.earlyLeaveJustificationStatus === 'rejected'
+                          ? 'rejected'
+                          : 'approved'
+                      }
+                    />
+                  </>
+                ) : null}
+              </p>
+            ) : null}
+          </div>
+        )
+      })}
     </div>
   )
 }

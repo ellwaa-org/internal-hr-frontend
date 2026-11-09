@@ -29,6 +29,7 @@ export const queryKeys = {
       search: string
       role: string
       status: string
+      absentStreak?: number
     }) => [...queryKeys.users.all, 'list', params] as const,
     directory: (params?: { limit?: number; role?: string; search?: string }) =>
       [...queryKeys.users.all, 'directory', params ?? {}] as const,
