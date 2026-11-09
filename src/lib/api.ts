@@ -668,6 +668,14 @@ function asUserRecord(raw: Record<string, unknown>): UserRecord {
         ? undefined
         : Number(raw.consecutiveAbsenceDays),
     absentSevenConsecutiveDays: Boolean(raw.absentSevenConsecutiveDays),
+    consecutiveAbsence:
+      raw.consecutiveAbsence && typeof raw.consecutiveAbsence === 'object'
+        ? {
+            startDate: String((raw.consecutiveAbsence as Record<string, unknown>).startDate ?? ''),
+            endDate: String((raw.consecutiveAbsence as Record<string, unknown>).endDate ?? ''),
+            days: Number((raw.consecutiveAbsence as Record<string, unknown>).days ?? 0),
+          }
+        : null,
     absentDaysThisMonth: Array.isArray(raw.absentDaysThisMonth)
       ? (raw.absentDaysThisMonth as unknown[]).filter((d): d is string => typeof d === 'string')
       : undefined,
@@ -1162,6 +1170,7 @@ export async function listUsers(
     officeId: validated.officeId,
     isActive: validated.isActive,
     search: validated.search,
+    absentStreak: validated.absentStreak,
   })
   const body = await request<unknown>(`/auth/users${qs}`, {}, token)
   return normalizePaginated(body, page, limit, ['data', 'users', 'items', 'results'], asUserRecord)

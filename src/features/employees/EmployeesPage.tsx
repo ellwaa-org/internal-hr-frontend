@@ -14,7 +14,6 @@ import {
   Smartphone,
   ClipboardCheck,
   Trash2,
-  TriangleAlert,
   UserPlus,
 } from 'lucide-react'
 import {
@@ -85,6 +84,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { SecurityLogsDialog } from '@/features/employees/SecurityLogsDialog'
+import { AbsenceStreakPanel } from '@/features/employees/AbsenceStreakPanel'
 import { UserReviewDialog } from '@/features/employees/UserReviewDialog'
 
 type UpdatePayload = UpdateUserInput
@@ -430,6 +430,12 @@ function EmployeesPage({
         </div>
       </FiltersBar>
 
+      <AbsenceStreakPanel
+        token={token}
+        canReview={canReviewAttendance}
+        onOpenReview={(user) => setModal({ type: 'review', user })}
+      />
+
       <TableSection
         footer={
           <PaginationBar
@@ -466,35 +472,10 @@ function EmployeesPage({
               <TableMessage colSpan={9}>لا يوجد موظفون مطابقون</TableMessage>
             ) : (
               users.map((user) => (
-                <Tr
-                  key={user.id}
-                  className={user.absentSevenConsecutiveDays ? 'bg-red-50/60' : undefined}
-                >
+                <Tr key={user.id}>
                   <Td>
                     <div className="flex min-w-0 flex-col gap-0.5">
                       <span className="font-semibold text-foreground">{user.fullName}</span>
-                      {user.absentSevenConsecutiveDays ? (
-                        <span className="flex w-fit items-center gap-1.5 rounded-full bg-danger-soft px-2 py-0.5 text-[11px] font-bold text-red-700">
-                          <TriangleAlert className="h-3 w-3 shrink-0" />
-                          غائب {user.consecutiveAbsenceDays} يومًا متتاليًا
-                          {user.absenceReviewStatus ? (
-                            <span
-                              className={cn(
-                                'rounded-full px-1.5 py-px text-[10px] font-semibold',
-                                user.absenceReviewStatus === 'pending' && 'bg-amber-100 text-amber-700',
-                                user.absenceReviewStatus === 'approved' && 'bg-success-soft text-success',
-                                user.absenceReviewStatus === 'rejected' && 'bg-red-100 text-red-800',
-                              )}
-                            >
-                              {user.absenceReviewStatus === 'pending'
-                                ? 'بانتظار المراجعة'
-                                : user.absenceReviewStatus === 'approved'
-                                  ? 'مقبول'
-                                  : 'مرفوض'}
-                            </span>
-                          ) : null}
-                        </span>
-                      ) : null}
                       {(user.department?.name || officeNamesOf(user)) && (
                         <span className="truncate text-xs text-muted">
                           {[user.department?.name, officeNamesOf(user)].filter(Boolean).join(' · ')}
