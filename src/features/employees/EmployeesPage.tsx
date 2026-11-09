@@ -12,7 +12,9 @@ import {
   RotateCcw,
   ShieldAlert,
   Smartphone,
+  ClipboardCheck,
   Trash2,
+  TriangleAlert,
   UserPlus,
 } from 'lucide-react'
 import {
@@ -83,6 +85,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { SecurityLogsDialog } from '@/features/employees/SecurityLogsDialog'
+import { UserReviewDialog } from '@/features/employees/UserReviewDialog'
 
 type UpdatePayload = UpdateUserInput
 
@@ -93,6 +96,7 @@ type ModalMode =
   | { type: 'confirm-update'; user: UserRecord; update: UpdatePayload }
   | { type: 'reset-password'; user: UserRecord }
   | { type: 'security-logs'; user: UserRecord }
+  | { type: 'review'; user: UserRecord }
   | { type: 'restore' }
   | { type: 'confirm'; action: ConfirmAction; user: UserRecord }
 
@@ -136,8 +140,9 @@ function EmployeesPage({
   const canResetDevice = hasPermission(permissions, 'user.resetDevice')
   const canReadSecurityLogs = hasPermission(permissions, 'securityLog.read')
   const canListRoles = hasPermission(permissions, 'role.readAll')
+  const canReviewAttendance = hasPermission(permissions, 'attendance.justificationManage')
   const hasRowActions =
-    canUpdate || canToggleStatus || canDelete || canResetPassword || canResetDevice || canReadSecurityLogs
+    canUpdate || canToggleStatus || canDelete || canResetPassword || canResetDevice || canReadSecurityLogs || canReviewAttendance
 
   const handleApiError = useCallback(
     (err: unknown, fallback: string) => {
@@ -220,6 +225,7 @@ function EmployeesPage({
   const confirmUpdateDialog = useDialogState(modal?.type === 'confirm-update' ? modal : null)
   const resetPasswordDialog = useDialogState(modal?.type === 'reset-password' ? modal : null)
   const securityLogsDialog = useDialogState(modal?.type === 'security-logs' ? modal : null)
+  const reviewDialog = useDialogState(modal?.type === 'review' ? modal : null)
   const restoreDialog = useDialogState(modal?.type === 'restore' ? modal : null)
 
   const runRestore = async (employeeCode: string) => {
@@ -460,10 +466,35 @@ function EmployeesPage({
               <TableMessage colSpan={9}>لا يوجد موظفون مطابقون</TableMessage>
             ) : (
               users.map((user) => (
-                <Tr key={user.id}>
+                <Tr
+                  key={user.id}
+                  className={user.absentSevenConsecutiveDays ? 'bg-red-50/60' : undefined}
+                >
                   <Td>
                     <div className="flex min-w-0 flex-col gap-0.5">
                       <span className="font-semibold text-foreground">{user.fullName}</span>
+                      {user.absentSevenConsecutiveDays ? (
+                        <span className="flex w-fit items-center gap-1.5 rounded-full bg-danger-soft px-2 py-0.5 text-[11px] font-bold text-red-700">
+                          <TriangleAlert className="h-3 w-3 shrink-0" />
+                          غائب {user.consecutiveAbsenceDays} يومًا متتاليًا
+                          {user.absenceReviewStatus ? (
+                            <span
+                              className={cn(
+                                'rounded-full px-1.5 py-px text-[10px] font-semibold',
+                                user.absenceReviewStatus === 'pending' && 'bg-amber-100 text-amber-700',
+                                user.absenceReviewStatus === 'approved' && 'bg-success-soft text-success',
+                                user.absenceReviewStatus === 'rejected' && 'bg-red-100 text-red-800',
+                              )}
+                            >
+                              {user.absenceReviewStatus === 'pending'
+                                ? 'بانتظار المراجعة'
+                                : user.absenceReviewStatus === 'approved'
+                                  ? 'مقبول'
+                                  : 'مرفوض'}
+                            </span>
+                          ) : null}
+                        </span>
+                      ) : null}
                       {(user.department?.name || officeNamesOf(user)) && (
                         <span className="truncate text-xs text-muted">
                           {[user.department?.name, officeNamesOf(user)].filter(Boolean).join(' · ')}
@@ -566,6 +597,12 @@ function EmployeesPage({
                               سجلات الأمان
                             </DropdownMenuItem>
                           )}
+                          {canReviewAttendance && (
+                            <DropdownMenuItem onSelect={() => setModal({ type: 'review', user })}>
+                              <ClipboardCheck />
+                              قبول/رفض الغياب والتأخير والانصراف المبكر
+                            </DropdownMenuItem>
+                          )}
                           {canDelete && (
                             <>
                               <DropdownMenuSeparator />
@@ -666,6 +703,16 @@ function EmployeesPage({
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <UserReviewDialog
+        open={reviewDialog.open}
+        onOpenChange={(open) => {
+          if (!open) closeModal()
+        }}
+        token={token}
+        user={reviewDialog.data?.user ?? null}
+        onUnauthorized={onUnauthorized}
+      />
 
       <Dialog open={restoreDialog.open} onOpenChange={(open) => !open && closeModal()}>
         <DialogContent>

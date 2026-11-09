@@ -1,6 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarDays, Check, Download, Loader2, RefreshCw, X } from 'lucide-react'
+import { CalendarDays, Check, ClipboardCheck, Download, Loader2, RefreshCw, X } from 'lucide-react'
 import {
   exportOfficeAttendanceExcel,
   listAttendanceUsers,
@@ -38,6 +38,7 @@ import {
   AttendanceCalendar,
   type AttendanceCalendarUser,
 } from '@/features/attendance/AttendanceCalendar'
+import { UserReviewDialog, type ReviewDialogUser } from '@/features/employees/UserReviewDialog'
 import {
   FiltersBar,
   PageHeader,
@@ -264,6 +265,8 @@ function AttendancePage({
   const [exporting, setExporting] = useState(false)
   const [selectedUser, setSelectedUser] = useState<AttendanceCalendarUser | null>(null)
   const calendarDialog = useDialogState(selectedUser)
+  const [reviewUser, setReviewUser] = useState<ReviewDialogUser | null>(null)
+  const reviewDialog = useDialogState(reviewUser)
 
   const canExport = hasPermission(permissions, 'attendance.export')
   const canReviewJustifications = hasPermission(permissions, 'attendance.justificationManage')
@@ -358,6 +361,20 @@ function AttendancePage({
       handleApiError(attendanceQuery.error, 'تعذر تحميل سجلات الحضور')
     }
   }, [attendanceQuery.error, handleApiError])
+
+  // Filter-option failures must not look like a table failure: surface a
+  // specific message and keep the page (and the other filters) usable.
+  useEffect(() => {
+    if (departmentsQuery.error && !isForbiddenError(departmentsQuery.error)) {
+      notify.error(departmentsQuery.error, 'تعذر تحميل قائمة الإدارات — فلتر الإدارات غير متاح حالياً')
+    }
+  }, [departmentsQuery.error])
+
+  useEffect(() => {
+    if (officesQuery.error && !isForbiddenError(officesQuery.error)) {
+      notify.error(officesQuery.error, 'تعذر تحميل قائمة المكاتب — فلتر المكاتب غير متاح حالياً')
+    }
+  }, [officesQuery.error])
 
   const offices = officesQuery.data ?? []
   const departments = departmentsQuery.data ?? []
@@ -637,6 +654,25 @@ function AttendancePage({
                         <span className="block min-w-0 truncate font-semibold text-foreground" title={row.employeeName}>
                           {row.employeeName}
                         </span>
+                        {canReviewJustifications ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 shrink-0 p-0"
+                            aria-label={`قبول/رفض الغياب والتأخير والانصراف المبكر لـ ${row.employeeName}`}
+                            title="قبول/رفض الغياب والتأخير والانصراف المبكر"
+                            onClick={() =>
+                              setReviewUser({
+                                id: row.userId,
+                                fullName: row.employeeName,
+                                employeeCode: row.employeeCode,
+                              })
+                            }
+                          >
+                            <ClipboardCheck />
+                          </Button>
+                        ) : null}
                         <Button
                           type="button"
                           variant="ghost"
@@ -811,6 +847,16 @@ function AttendancePage({
         </Table>
       </TableSection>
 
+      <UserReviewDialog
+        open={reviewDialog.open}
+        onOpenChange={(open) => {
+          if (!open) setReviewUser(null)
+        }}
+        token={token}
+        user={reviewDialog.data ?? null}
+        onUnauthorized={onUnauthorized}
+      />
+
       <Dialog
         open={calendarDialog.open}
         onOpenChange={(open) => {
@@ -833,6 +879,7 @@ function AttendancePage({
                 token={token}
                 user={calendarDialog.data}
                 initialDate={from}
+                canReview={canReviewJustifications}
               />
             </>
           ) : null}

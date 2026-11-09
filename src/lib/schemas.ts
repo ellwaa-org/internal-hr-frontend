@@ -441,6 +441,21 @@ export const userRecordSchema = z.object({
   offices: z.array(officeOptionSchema).optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
+  /** Consecutive-absence streak info (current month) — GET /auth/users. */
+  consecutiveAbsenceDays: z.number().optional(),
+  absentSevenConsecutiveDays: z.boolean().optional(),
+  absentDaysThisMonth: z.array(z.string()).optional(),
+  absenceReviewStatus: z.enum(['pending', 'approved', 'rejected']).nullable().optional(),
+  absentDayReviews: z
+    .record(
+      z.string(),
+      z.object({
+        status: z.enum(['pending', 'approved', 'rejected']),
+        note: z.string().nullable(),
+        reviewedAt: z.string().nullable().optional(),
+      }),
+    )
+    .optional(),
 })
 
 export const departmentRecordSchema = z.object({
