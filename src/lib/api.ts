@@ -398,6 +398,28 @@ async function request<T>(
   return JSON.parse(text) as T
 }
 
+export interface LeaveRequest {
+  id: number
+  userId: number
+  startDate: string
+  endDate: string
+  reason: string
+  status: 'pending' | 'approved' | 'rejected'
+}
+
+export async function listLeaveRequests(token: string, all = false): Promise<LeaveRequest[]> {
+  const result = await request<{ data: LeaveRequest[] }>(all ? '/leave-requests' : '/leave-requests/me', {}, token)
+  return result.data
+}
+
+export async function createLeaveRequest(token: string, data: { startDate: string; endDate: string; reason: string; userId?: number }) {
+  return request(data.userId ? '/leave-requests/on-behalf' : '/leave-requests', { method: 'POST', body: JSON.stringify(data) }, token)
+}
+
+export async function reviewLeaveRequest(token: string, id: number, status: 'approved' | 'rejected') {
+  return request(`/leave-requests/${id}/review`, { method: 'PATCH', body: JSON.stringify({ status }) }, token)
+}
+
 export interface LoginResponse {
   accessToken?: string
   access_token?: string

@@ -20,6 +20,7 @@ import { NAV_PATHS, NAV_TITLES, canAccessNavPage, firstAllowedPage, navPageFromP
 import { roleLabel } from '@/lib/permissions'
 import { notify } from '@/lib/toast'
 import AttendancePage from '@/features/attendance/AttendancePage'
+import LeavePage from '@/features/leave/LeavePage'
 import AuditLogsPage from '@/features/audit/AuditLogsPage'
 import DepartmentsPage from '@/features/departments/DepartmentsPage'
 import EmployeesPage from '@/features/employees/EmployeesPage'
@@ -63,6 +64,7 @@ const NAV_ICONS: Record<NavPage, typeof Users> = {
   departments: Building2,
   offices: MapPin,
   attendance: CalendarCheck,
+  leave: CalendarCheck,
   tasks: Briefcase,
   roles: ShieldCheck,
   auditLogs: ScrollText,
@@ -71,7 +73,7 @@ const NAV_ICONS: Record<NavPage, typeof Users> = {
 
 const NAV_GROUPS: { label: string; pages: NavPage[] }[] = [
   { label: 'الرئيسية', pages: ['employees', 'departments', 'offices', 'auditLogs'] },
-  { label: 'العمليات', pages: ['attendance', 'tasks', 'settings'] },
+  { label: 'العمليات', pages: ['attendance', 'leave', 'tasks', 'settings'] },
 ]
 
 function initialsOf(name: string): string {
@@ -438,6 +440,7 @@ function HomePage({ token, onSignOut }: { token: string; onSignOut: () => void }
               </RequirePermission>
             }
           />
+          <Route path={NAV_PATHS.leave} element={<RequirePermission profile={profile} page="leave"><LeavePage token={token} permissions={profile.permissions} /></RequirePermission>} />
           <Route
             path={NAV_PATHS.tasks}
             element={
