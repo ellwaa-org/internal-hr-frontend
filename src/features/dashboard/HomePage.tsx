@@ -440,7 +440,7 @@ function HomePage({ token, onSignOut }: { token: string; onSignOut: () => void }
               </RequirePermission>
             }
           />
-          <Route path={NAV_PATHS.leave} element={<RequirePermission profile={profile} page="leave"><LeavePage token={token} permissions={profile.permissions} /></RequirePermission>} />
+          <Route path={NAV_PATHS.leave} element={<RequirePermission profile={profile} page="leave"><LeavePage token={token} permissions={profile.permissions} role={profile.role} /></RequirePermission>} />
           <Route
             path={NAV_PATHS.tasks}
             element={

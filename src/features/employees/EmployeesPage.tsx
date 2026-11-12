@@ -84,6 +84,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { SecurityLogsDialog } from '@/features/employees/SecurityLogsDialog'
+import { PerformanceDialog } from '@/features/employees/PerformanceDialog'
 import { AbsenceStreakPanel } from '@/features/employees/AbsenceStreakPanel'
 import { UserReviewDialog } from '@/features/employees/UserReviewDialog'
 
@@ -130,8 +131,10 @@ function EmployeesPage({
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
   const [modal, setModal] = useState<ModalMode>(null)
   const [busy, setBusy] = useState(false)
+  const [performanceUser, setPerformanceUser] = useState<UserRecord | null>(null)
 
   // Action visibility is decided by permissions only — never by role name.
+  const canViewPerformance = hasPermission(permissions, 'user.readAll')
   const canCreate = hasPermission(permissions, 'user.create')
   const canUpdate = hasPermission(permissions, 'user.update')
   const canToggleStatus = hasPermission(permissions, 'user.toggleStatus')
@@ -142,7 +145,7 @@ function EmployeesPage({
   const canListRoles = hasPermission(permissions, 'role.readAll')
   const canReviewAttendance = hasPermission(permissions, 'attendance.justificationManage')
   const hasRowActions =
-    canUpdate || canToggleStatus || canDelete || canResetPassword || canResetDevice || canReadSecurityLogs || canReviewAttendance
+    canViewPerformance || canUpdate || canToggleStatus || canDelete || canResetPassword || canResetDevice || canReadSecurityLogs || canReviewAttendance
 
   const handleApiError = useCallback(
     (err: unknown, fallback: string) => {
@@ -538,6 +541,9 @@ function EmployeesPage({
                             {user.fullName} • {user.employeeCode}
                           </DropdownMenuLabel>
                           <DropdownMenuSeparator />
+                          {canViewPerformance && (
+                            <DropdownMenuItem onSelect={() => setPerformanceUser(user)}>تقرير الأداء</DropdownMenuItem>
+                          )}
                           {canUpdate && (
                             <DropdownMenuItem onSelect={() => setModal({ type: 'update', user })}>
                               <Pencil />
@@ -668,6 +674,12 @@ function EmployeesPage({
               }}
             />
           ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!performanceUser} onOpenChange={(open) => !open && setPerformanceUser(null)}>
+        <DialogContent size="lg">
+          {performanceUser && <PerformanceDialog token={token} user={performanceUser} />}
         </DialogContent>
       </Dialog>
 

@@ -2079,3 +2079,25 @@ export async function listAuditLogs(
   }
 }
 
+
+export interface EmployeePerformanceResult {
+  kpiResultId: string
+  contractVersion: number
+  periodFrom: string
+  periodTo: string
+  kind: string
+  score: number | null
+  policyName: string | null
+  policyVersion: number | null
+  componentScores: Record<string, number>
+  evidenceRefs: Array<{ ticketId: string; ticketNumber?: string; component?: string; met?: boolean }>
+  dispute: { status: string; resolution?: string } | null
+  receivedAt: string
+  updatedAt: string
+}
+
+export function getEmployeePerformance(token: string, userId: number) {
+  return request<{ success: boolean; identityLinked: boolean; data: EmployeePerformanceResult[] }>(
+    `/employee-performance/${userId}`, {}, token,
+  )
+}
