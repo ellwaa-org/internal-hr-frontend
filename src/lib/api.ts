@@ -412,8 +412,8 @@ export async function listLeaveRequests(token: string, all = false): Promise<Lea
   return result.data
 }
 
-export async function createLeaveRequest(token: string, data: { startDate: string; endDate: string; reason: string; userId?: number }) {
-  return request(data.userId ? '/leave-requests/on-behalf' : '/leave-requests', { method: 'POST', body: JSON.stringify(data) }, token)
+export async function createLeaveRequest(token: string, data: { startDate: string; endDate: string; reason: string; userId?: number; employeeCode?: string }) {
+  return request(data.userId || data.employeeCode ? '/leave-requests/on-behalf' : '/leave-requests', { method: 'POST', body: JSON.stringify(data) }, token)
 }
 
 export async function reviewLeaveRequest(token: string, id: number, status: 'approved' | 'rejected') {

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createLeaveRequest, listLeaveRequests, reviewLeaveRequest, type LeaveRequest } from '@/lib/api'
+import { ApiError } from '@/lib/errors'
 
 export default function LeavePage({ token, permissions, role }: { token: string; permissions: string[]; role: string }) {
   const canReview = role === 'ADMIN'
@@ -9,7 +10,7 @@ export default function LeavePage({ token, permissions, role }: { token: string;
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [reason, setReason] = useState('')
-  const [userId, setUserId] = useState('')
+  const [employeeCode, setEmployeeCode] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const client = useQueryClient()
@@ -19,9 +20,9 @@ export default function LeavePage({ token, permissions, role }: { token: string;
   const submit = async (event: FormEvent) => {
     event.preventDefault(); setError(''); setBusy(true)
     try {
-      await createLeaveRequest(token, { startDate, endDate, reason: reason.trim(), ...(canSubmitForOthers && userId ? { userId: Number(userId) } : {}) })
-      setStartDate(''); setEndDate(''); setReason(''); setUserId(''); await refresh()
-    } catch { setError('تعذر إرسال طلب الإجازة. تحقق من البيانات وحاول مرة أخرى.') }
+      await createLeaveRequest(token, { startDate, endDate, reason: reason.trim(), ...(canSubmitForOthers && employeeCode.trim() ? { employeeCode: employeeCode.trim() } : {}) })
+      setStartDate(''); setEndDate(''); setReason(''); setEmployeeCode(''); await refresh()
+    } catch (err) { setError(err instanceof ApiError && err.status === 404 && employeeCode.trim() ? 'لم يتم العثور على موظف نشط بهذا الكود. تحقق من كود الموظف وحاول مرة أخرى.' : err instanceof ApiError && err.status === 403 ? 'لا تملك صلاحية تقديم طلب إجازة لموظف آخر.' : 'تعذر إرسال طلب الإجازة. تحقق من البيانات وحاول مرة أخرى.') }
     finally { setBusy(false) }
   }
   const review = async (id: number, status: 'approved' | 'rejected') => {
@@ -43,7 +44,7 @@ export default function LeavePage({ token, permissions, role }: { token: string;
       <label className="space-y-1 text-sm"><span>من</span><input type="date" required value={startDate} onChange={(e) => setStartDate(e.target.value)} className="block w-full rounded-lg border p-2" /></label>
       <label className="space-y-1 text-sm"><span>إلى</span><input type="date" required min={startDate} value={endDate} onChange={(e) => setEndDate(e.target.value)} className="block w-full rounded-lg border p-2" /></label>
       <label className="space-y-1 text-sm sm:col-span-2"><span>السبب</span><textarea required maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} className="block w-full rounded-lg border p-2" /></label>
-      {canSubmitForOthers && <label className="space-y-1 text-sm sm:col-span-2"><span>رقم الموظف في HR (اختياري؛ اتركه فارغًا لطلب إجازتك)</span><input type="number" min="1" step="1" value={userId} onChange={(e) => setUserId(e.target.value)} className="block w-full rounded-lg border p-2" /></label>}
+      {canSubmitForOthers && <label className="space-y-1 text-sm sm:col-span-2"><span>كود الموظف (اختياري؛ اتركه فارغًا لطلب إجازتك)</span><input type="text" maxLength={50} value={employeeCode} onChange={(e) => setEmployeeCode(e.target.value)} className="block w-full rounded-lg border p-2" /></label>}
       <button disabled={busy || !reason.trim()} className="w-fit rounded-lg bg-blue-800 px-5 py-2 text-sm text-white disabled:opacity-50">إرسال الطلب</button>
     </form>
     <section className="rounded-xl border bg-white p-5"><h2 className="font-semibold">طلباتي</h2>{mine.isLoading ? <p>جارٍ التحميل…</p> : mine.isError ? <p role="alert">تعذر تحميل الطلبات.</p> : rows(mine.data ?? [], false, false)}</section>
